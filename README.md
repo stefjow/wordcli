@@ -13,8 +13,8 @@ python wordcli.py <command> [options]
 ### extract — Structured markdown export
 
 ```
-wordcli extract datei.docx                # Markdown to stdout
-wordcli extract datei.docx -o output.md   # Write to file
+wordcli extract file.docx                # Markdown to stdout
+wordcli extract file.docx -o output.md   # Write to file
 ```
 
 Produces markdown with headings (from Word styles), footnote markers (`[^2]`) with definitions at the end, and tables as markdown tables (including merged cells).
@@ -22,8 +22,8 @@ Produces markdown with headings (from Word styles), footnote markers (`[^2]`) wi
 ### stats — Document statistics
 
 ```
-wordcli stats datei.docx          # Human-readable
-wordcli stats datei.docx --json   # JSON
+wordcli stats file.docx          # Human-readable
+wordcli stats file.docx --json   # JSON
 ```
 
 Counts paragraphs, tables, footnotes, comments (by author), and tracked changes (by author, INS/DEL).
@@ -31,10 +31,10 @@ Counts paragraphs, tables, footnotes, comments (by author), and tracked changes 
 ### text — Extract full text
 
 ```
-wordcli text datei.docx                    # All paragraphs with numbers
-wordcli text datei.docx --paragraph 5      # Single paragraph
-wordcli text datei.docx --paragraphs 3-7   # Range
-wordcli text datei.docx --accept           # Accepted text only (no change markers)
+wordcli text file.docx                    # All paragraphs with numbers
+wordcli text file.docx --paragraph 5      # Single paragraph
+wordcli text file.docx --paragraphs 3-7   # Range
+wordcli text file.docx --accept           # Accepted text only (no change markers)
 ```
 
 Tracked changes are shown as `[+inserted+]` and `[-deleted-]` by default.
@@ -42,8 +42,8 @@ Tracked changes are shown as `[+inserted+]` and `[-deleted-]` by default.
 ### search — Search with context
 
 ```
-wordcli search datei.docx "Suchbegriff"
-wordcli search datei.docx "Suchbegriff" --footnotes   # Also search footnotes
+wordcli search file.docx "search term"
+wordcli search file.docx "search term" --footnotes   # Also search footnotes
 ```
 
 Shows paragraph number and 50 characters of surrounding context.
@@ -51,30 +51,30 @@ Shows paragraph number and 50 characters of surrounding context.
 ### footnotes — List footnotes
 
 ```
-wordcli footnotes datei.docx        # All footnotes
-wordcli footnotes datei.docx 3      # Single footnote by ID
+wordcli footnotes file.docx        # All footnotes
+wordcli footnotes file.docx 3      # Single footnote by ID
 ```
 
 ### comments — List comments
 
 ```
-wordcli comments datei.docx
-wordcli comments datei.docx --author Claude
-wordcli comments datei.docx --json
+wordcli comments file.docx
+wordcli comments file.docx --author Claude
+wordcli comments file.docx --json
 ```
 
 ### changes — Show tracked changes
 
 ```
-wordcli changes datei.docx
-wordcli changes datei.docx --author Claude
+wordcli changes file.docx
+wordcli changes file.docx --author Claude
 ```
 
 ### tables — Extract tables as markdown
 
 ```
-wordcli tables datei.docx      # All tables
-wordcli tables datei.docx 1    # Single table by number
+wordcli tables file.docx      # All tables
+wordcli tables file.docx 1    # Single table by number
 ```
 
 ### diff — Compare two documents
@@ -97,10 +97,10 @@ Removes tracked changes from the edited document and compares both main text and
 ### replace — Replace text as tracked change
 
 ```
-wordcli replace datei.docx --old "Tpyo" --new "Typo" --author Claude
-wordcli replace datei.docx --old "word" --new "term" --paragraph 5
-wordcli replace datei.docx --old "X" --new "2" --context "Abbildung X)" --author Claude
-wordcli replace datei.docx --old "word" --new "term" -o output.docx
+wordcli replace file.docx --old "Tpyo" --new "Typo" --author Claude
+wordcli replace file.docx --old "word" --new "term" --paragraph 5
+wordcli replace file.docx --old "X" --new "2" --context "Figure X)" --author Claude
+wordcli replace file.docx --old "word" --new "term" -o output.docx
 ```
 
 Replaces text as a tracked change (insertion + deletion) visible in Word's review mode. Handles text that spans multiple runs.
