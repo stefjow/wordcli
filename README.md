@@ -93,3 +93,20 @@ wordcli verify edited.docx --original original.docx --author Claude  # Only remo
 ```
 
 Removes tracked changes from the edited document and compares both main text and footnotes against the original. Without `--author`, all tracked changes are removed. With `--author`, only that author's changes are removed (useful when the document already had tracked changes from other reviewers). Exit code 0 = OK, 1 = text loss detected.
+
+### replace — Replace text as tracked change
+
+```
+wordcli replace datei.docx --old "Tpyo" --new "Typo" --author Claude
+wordcli replace datei.docx --old "word" --new "term" --paragraph 5
+wordcli replace datei.docx --old "X" --new "2" --context "Abbildung X)" --author Claude
+wordcli replace datei.docx --old "word" --new "term" -o output.docx
+```
+
+Replaces text as a tracked change (insertion + deletion) visible in Word's review mode. Handles text that spans multiple runs.
+
+Scoping options to avoid ambiguous matches:
+- `--paragraph N`: Only search in paragraph N (use `text` or `search` to find the number)
+- `--context "..."`: Provide a longer unique string that contains `--old`; only the `--old` portion is replaced
+
+Without `-o`, the input file is overwritten. With `-o`, a new file is created.
