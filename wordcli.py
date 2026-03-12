@@ -354,9 +354,11 @@ class DocxReader:
             "changes_by_author": changes_by_author,
         }
 
-    def verify_against_original(self, original_path):
-        """Verify no text was lost by removing Claude's tracked changes.
+    def verify_against_original(self, original_path, author=None):
+        """Verify no text was lost by removing tracked changes.
 
+        If author is given, only that author's changes are removed.
+        If author is None, ALL tracked changes are removed (accept all).
         Checks both main text and footnotes.
         Returns (ok, main_missing, main_extra, fn_missing, fn_extra).
         """
@@ -365,7 +367,7 @@ class DocxReader:
         if root is None:
             return False, ["Could not parse edited document"], [], [], []
         edited_root = copy.deepcopy(root)
-        self._remove_claude_changes(edited_root)
+        self._remove_tracked_changes(edited_root, author)
         edited_text = self._extract_plain_text(edited_root)
 
         orig = DocxReader(original_path)
@@ -387,7 +389,7 @@ class DocxReader:
         fn_extra = []
         if fn_root is not None:
             edited_fn_root = copy.deepcopy(fn_root)
-            self._remove_claude_changes(edited_fn_root)
+            self._remove_tracked_changes(edited_fn_root, author)
             edited_fn_text = self._extract_footnote_texts(edited_fn_root)
 
             orig_fn_root = orig._parse_xml("word/footnotes.xml")
@@ -401,21 +403,26 @@ class DocxReader:
         ok = len(main_missing) == 0 and len(fn_missing) == 0
         return ok, main_missing, main_extra, fn_missing, fn_extra
 
-    def _remove_claude_changes(self, root):
-        """Remove tracked changes authored by Claude."""
+    def _remove_tracked_changes(self, root, author=None):
+        """Remove tracked changes. If author is given, only that author's.
+        If author is None, remove ALL tracked changes."""
+        # Remove insertions (drop the inserted content)
         for parent in root.iter():
             to_remove = []
             for child in parent:
-                if child.tag == INS_TAG and child.get(AUTHOR_ATTR) == "Claude":
-                    to_remove.append(child)
+                if child.tag == INS_TAG:
+                    if author is None or child.get(AUTHOR_ATTR) == author:
+                        to_remove.append(child)
             for elem in to_remove:
                 parent.remove(elem)
 
+        # Unwrap deletions (restore the deleted content)
         for parent in root.iter():
             to_process = []
             for child in parent:
-                if child.tag == DEL_TAG and child.get(AUTHOR_ATTR) == "Claude":
-                    to_process.append((child, list(parent).index(child)))
+                if child.tag == DEL_TAG:
+                    if author is None or child.get(AUTHOR_ATTR) == author:
+                        to_process.append((child, list(parent).index(child)))
             for del_elem, del_index in reversed(to_process):
                 for elem in del_elem.iter():
                     if elem.tag == DELTEXT_TAG:
@@ -554,7 +561,7 @@ def cmd_diff(args):
 
 def cmd_verify(args):
     doc = DocxReader(args.file)
-    ok, main_missing, main_extra, fn_missing, fn_extra = doc.verify_against_original(args.original)
+    ok, main_missing, main_extra, fn_missing, fn_extra = doc.verify_against_original(args.original, author=args.author)
     if ok:
         print("OK: No text loss detected.")
         sys.exit(0)
@@ -713,6 +720,7 @@ def main():
     p_ver = sub.add_parser("verify", help="Check for text loss (main text + footnotes)")
     p_ver.add_argument("file")
     p_ver.add_argument("--original", required=True)
+    p_ver.add_argument("--author", default=None, help="Only remove this author's changes (default: all)")
     p_ver.set_defaults(func=cmd_verify)
 
     # extract
