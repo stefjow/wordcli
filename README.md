@@ -1,6 +1,6 @@
 # wordcli
 
-CLI tool for inspecting Word (.docx) documents. No dependencies beyond Python 3 stdlib.
+CLI tool for reading and writing Word (.docx) documents — extract content, replace text with tracked changes, compare versions, and more. No dependencies beyond Python 3 stdlib.
 
 ## Usage
 
