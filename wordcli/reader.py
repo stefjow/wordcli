@@ -10,6 +10,7 @@ from .constants import (
     SECTPR_TAG, FOOTNOTE_TAG, FOOTNOTE_REF_TAG, PPR_TAG, PSTYLE_TAG,
     AUTHOR_ATTR, DATE_ATTR, ID_ATTR, VAL_ATTR, HEADING_RE,
     FLDCHAR_TAG, FLDCHARTYPE_ATTR, INSTRTEXT_TAG,
+    HYPERLINK_TAG, RID_ATTR,
 )
 from .formatting import table_to_markdown
 
@@ -29,38 +30,89 @@ class DocxReader:
                 return None
         return self._cache[entry]
 
+    def _process_run(self, run, accept_changes, footnote_markers, field_state):
+        """Process a single run, returning text parts and updating field_state.
+
+        field_state is a dict with keys: in_field, in_display, instr, display.
+        """
+        parts = []
+        for sub in run:
+            if sub.tag == FLDCHAR_TAG:
+                fct = sub.get(FLDCHARTYPE_ATTR)
+                if fct == "begin":
+                    field_state["in_field"] = True
+                    field_state["instr"] = ""
+                    field_state["display"] = []
+                elif fct == "separate":
+                    field_state["in_display"] = True
+                elif fct == "end":
+                    # Emit the field as markdown
+                    instr = field_state["instr"].strip()
+                    display = "".join(field_state["display"])
+                    if instr:
+                        parts.append(f"[{display}]({instr})")
+                    elif display:
+                        parts.append(display)
+                    field_state["in_field"] = False
+                    field_state["in_display"] = False
+            elif sub.tag == INSTRTEXT_TAG and sub.text and field_state["in_field"]:
+                if not field_state["in_display"]:
+                    field_state["instr"] += sub.text
+            elif sub.tag == T_TAG and sub.text:
+                if field_state["in_display"]:
+                    field_state["display"].append(sub.text)
+                else:
+                    parts.append(sub.text)
+            elif sub.tag == DELTEXT_TAG and sub.text and not accept_changes:
+                parts.append(sub.text)
+            elif sub.tag == FOOTNOTE_REF_TAG and footnote_markers:
+                fn_id = sub.get(ID_ATTR)
+                if fn_id and int(fn_id) >= 2:
+                    parts.append(f"[^{fn_id}]")
+        return parts
+
     def _text_from_element(self, elem, accept_changes=False, footnote_markers=False):
         """Extract text from an element, handling tracked changes."""
         parts = []
+        # Field state tracks fldChar begin/separate/end across sibling runs
+        field_state = {"in_field": False, "in_display": False, "instr": "", "display": []}
         for child in elem:
             if child.tag == R_TAG:
-                for sub in child:
-                    if sub.tag == T_TAG and sub.text:
-                        parts.append(sub.text)
-                    elif sub.tag == DELTEXT_TAG and sub.text and not accept_changes:
-                        parts.append(sub.text)
-                    elif sub.tag == FOOTNOTE_REF_TAG and footnote_markers:
-                        fn_id = sub.get(ID_ATTR)
-                        if fn_id and int(fn_id) >= 2:
-                            parts.append(f"[^{fn_id}]")
+                parts.extend(self._process_run(
+                    child, accept_changes, footnote_markers, field_state))
+            elif child.tag == HYPERLINK_TAG:
+                # Extract hyperlink target and text
+                link_parts = []
+                for run in child:
+                    if run.tag == R_TAG:
+                        for sub in run:
+                            if sub.tag == T_TAG and sub.text:
+                                link_parts.append(sub.text)
+                link_text = "".join(link_parts)
+                # Try to get URL from relationship ID
+                rid = child.get(RID_ATTR)
+                anchor = child.get(f"{{{self._w_ns}}}anchor") if hasattr(self, '_w_ns') else None
+                url = self._resolve_hyperlink(rid) if rid else None
+                if url:
+                    parts.append(f"[{link_text}]({url})")
+                elif anchor:
+                    parts.append(f"[{link_text}](#{anchor})")
+                elif link_text:
+                    parts.append(link_text)
             elif child.tag == INS_TAG:
                 if accept_changes:
                     for run in child:
                         if run.tag == R_TAG:
-                            for sub in run:
-                                if sub.tag == T_TAG and sub.text:
-                                    parts.append(sub.text)
-                                elif sub.tag == FOOTNOTE_REF_TAG and footnote_markers:
-                                    fn_id = sub.get(ID_ATTR)
-                                    if fn_id and int(fn_id) >= 2:
-                                        parts.append(f"[^{fn_id}]")
+                            parts.extend(self._process_run(
+                                run, accept_changes, footnote_markers, field_state))
                 else:
+                    ins_field_state = {"in_field": False, "in_display": False,
+                                       "instr": "", "display": []}
                     ins_parts = []
                     for run in child:
                         if run.tag == R_TAG:
-                            for sub in run:
-                                if sub.tag == T_TAG and sub.text:
-                                    ins_parts.append(sub.text)
+                            ins_parts.extend(self._process_run(
+                                run, accept_changes, footnote_markers, ins_field_state))
                     if ins_parts:
                         parts.append(f"[+{''.join(ins_parts)}+]")
             elif child.tag == DEL_TAG:
@@ -76,6 +128,23 @@ class DocxReader:
             else:
                 parts.append(self._text_from_element(child, accept_changes, footnote_markers))
         return "".join(parts)
+
+    def _resolve_hyperlink(self, rid):
+        """Resolve a relationship ID to a URL from document.xml.rels."""
+        if not hasattr(self, "_rels_cache"):
+            self._rels_cache = {}
+            try:
+                with self.zf.open("word/_rels/document.xml.rels") as f:
+                    rels_root = ET.parse(f).getroot()
+                for rel in rels_root:
+                    r_id = rel.get("Id")
+                    target = rel.get("Target")
+                    mode = rel.get("TargetMode", "")
+                    if r_id and target and mode == "External":
+                        self._rels_cache[r_id] = target
+            except KeyError:
+                pass
+        return self._rels_cache.get(rid)
 
     def _get_heading_level(self, p_elem):
         """Return heading level (1-9) or 0 if not a heading."""

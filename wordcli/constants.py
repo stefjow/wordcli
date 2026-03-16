@@ -44,6 +44,10 @@ FLDCHAR_TAG = f"{{{W_NS}}}fldChar"
 FLDCHARTYPE_ATTR = f"{{{W_NS}}}fldCharType"
 INSTRTEXT_TAG = f"{{{W_NS}}}instrText"
 NAME_ATTR = f"{{{W_NS}}}name"
+HYPERLINK_TAG = f"{{{W_NS}}}hyperlink"
+
+R_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+RID_ATTR = f"{{{R_NS}}}id"
 
 # Register namespaces so ET.tostring() uses proper prefixes instead of ns0:
 _ns_registered = set()
