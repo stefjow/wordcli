@@ -138,3 +138,18 @@ wordcli comment document.docx --anchor "phrase" --text "Note" --occurrence 2
 ```
 
 Adds a comment anchored to the matched text, visible in Word's review pane. Uses the same disambiguation as `replace` (`--paragraph`, `--context`, `--occurrence`). If the anchor text matches multiple locations without scoping, the command refuses and lists all matches.
+
+## Non-breaking spaces
+
+Non-breaking spaces (U+00A0) are displayed as `[NBSP]` in all text output. When using `--old`, `--new`, `--anchor`, or `--context`, write `[NBSP]` and wordcli converts it back to a real non-breaking space automatically.
+
+```
+wordcli text document.docx --paragraph 5
+# Output: [5] 100[NBSP]000 inhabitants
+
+wordcli replace document.docx --old "100[NBSP]000" --new "100[NBSP]001" --author Claude --paragraph 5
+```
+
+## Claude Code integration
+
+This project includes a [Claude Code](https://claude.com/claude-code) skill (`.claude/skills/wordcli/`) that enables LLMs to use wordcli autonomously — searching, replacing, and commenting with proper disambiguation.
