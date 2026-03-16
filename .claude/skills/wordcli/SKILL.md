@@ -10,7 +10,7 @@ description: >
 
 # wordcli
 
-Run via `python -m wordcli <command>` or `wordcli <command>` if installed.
+Run via `python -m wordcli <command>`. Use `python -m wordcli --help` or `python -m wordcli <command> --help` for full flag details.
 
 ## Commands
 
@@ -35,18 +35,18 @@ Both `replace` and `comment` **refuse if the target text matches multiple locati
 
 ```bash
 # 1. Find where the text appears
-wordcli search document.docx "target phrase"
+python -m wordcli search document.docx "target phrase"
 # Output: [14] ...context around target phrase...
 #         [87] ...another target phrase occurrence...
 
 # 2. Use --paragraph to scope
-wordcli replace document.docx --old "target phrase" --new "fixed" --author Claude --paragraph 14
+python -m wordcli replace document.docx --old "target phrase" --new "fixed" --author Claude --paragraph 14
 
 # Or use --occurrence for the Nth match
-wordcli comment document.docx --anchor "target phrase" --text "Review this" --author Claude --occurrence 1
+python -m wordcli comment document.docx --anchor "target phrase" --text "Review this" --author Claude --occurrence 1
 
 # Or use --context with a longer unique string
-wordcli replace document.docx --old "phrase" --new "term" --context "unique surrounding target phrase text" --author Claude
+python -m wordcli replace document.docx --old "phrase" --new "term" --context "unique surrounding target phrase text" --author Claude
 ```
 
 ## NBSP handling
@@ -56,7 +56,7 @@ Non-breaking spaces (U+00A0) appear as `[NBSP]` in all text output. When passing
 ```bash
 # Search output shows: [5] 100[NBSP]000 inhabitants
 # To replace, use the marker:
-wordcli replace document.docx --old "100[NBSP]000" --new "100[NBSP]001" --author Claude --paragraph 5
+python -m wordcli replace document.docx --old "100[NBSP]000" --new "100[NBSP]001" --author Claude --paragraph 5
 ```
 
 ## Notes
