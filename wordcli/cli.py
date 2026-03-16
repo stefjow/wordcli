@@ -26,12 +26,13 @@ def cmd_text(args):
 def cmd_search(args):
     doc = DocxReader(args.file)
     query = args.query.lower()
+    ctx = args.context_size
     paras = doc.extract_paragraphs(accept_changes=True)
     for nr, text in paras:
         idx = text.lower().find(query)
         if idx != -1:
-            start = max(0, idx - 50)
-            end = min(len(text), idx + len(args.query) + 50)
+            start = max(0, idx - ctx)
+            end = min(len(text), idx + len(args.query) + ctx)
             snippet = text[start:end]
             if start > 0:
                 snippet = "..." + snippet
@@ -43,8 +44,8 @@ def cmd_search(args):
         for fn_id, text in sorted(fns.items()):
             idx = text.lower().find(query)
             if idx != -1:
-                start = max(0, idx - 50)
-                end = min(len(text), idx + len(args.query) + 50)
+                start = max(0, idx - ctx)
+                end = min(len(text), idx + len(args.query) + ctx)
                 snippet = text[start:end]
                 if start > 0:
                     snippet = "..." + snippet
@@ -107,6 +108,7 @@ def cmd_diff(args):
 
 def cmd_verify(args):
     doc = DocxReader(args.file)
+    trunc = args.truncate
     ok, main_missing, main_extra, fn_missing, fn_extra = doc.verify_against_original(args.original, author=args.author)
     if ok:
         print("OK: No text loss detected.")
@@ -115,19 +117,19 @@ def cmd_verify(args):
     if main_missing:
         print(f"TEXT LOSS IN MAIN BODY: {len(main_missing)} paragraph(s) missing.")
         for line in main_missing:
-            print(f"  MISSING: {line[:120]}{'...' if len(line) > 120 else ''}")
+            print(f"  MISSING: {line[:trunc]}{'...' if len(line) > trunc else ''}")
     if main_extra:
         print(f"\n{len(main_extra)} unexpected paragraph(s) in main body:")
         for line in main_extra:
-            print(f"  EXTRA: {line[:120]}{'...' if len(line) > 120 else ''}")
+            print(f"  EXTRA: {line[:trunc]}{'...' if len(line) > trunc else ''}")
     if fn_missing:
         print(f"\nTEXT LOSS IN FOOTNOTES: {len(fn_missing)} footnote(s) missing.")
         for line in fn_missing:
-            print(f"  MISSING FN: {line[:120]}{'...' if len(line) > 120 else ''}")
+            print(f"  MISSING FN: {line[:trunc]}{'...' if len(line) > trunc else ''}")
     if fn_extra:
         print(f"\n{len(fn_extra)} unexpected footnote(s):")
         for line in fn_extra:
-            print(f"  EXTRA FN: {line[:120]}{'...' if len(line) > 120 else ''}")
+            print(f"  EXTRA FN: {line[:trunc]}{'...' if len(line) > trunc else ''}")
 
     sys.exit(1)
 
@@ -271,6 +273,7 @@ def main():
     p_search.add_argument("file")
     p_search.add_argument("query")
     p_search.add_argument("--footnotes", action="store_true", help="Also search footnotes")
+    p_search.add_argument("--context-size", type=int, default=50, help="Characters of context around match (default: 50)")
     p_search.set_defaults(func=cmd_search)
 
     # footnotes
@@ -303,6 +306,7 @@ def main():
     p_ver.add_argument("file")
     p_ver.add_argument("--original", required=True)
     p_ver.add_argument("--author", default=None, help="Only remove this author's changes (default: all)")
+    p_ver.add_argument("--truncate", type=int, default=120, help="Truncate preview lines to N characters (default: 120)")
     p_ver.set_defaults(func=cmd_verify)
 
     # extract

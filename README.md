@@ -57,10 +57,11 @@ Tracked changes are shown as `[+inserted+]` and `[-deleted-]` by default.
 
 ```
 wordcli search document.docx "query"
-wordcli search document.docx "query" --footnotes   # Also search footnotes
+wordcli search document.docx "query" --footnotes        # Also search footnotes
+wordcli search document.docx "query" --context-size 80  # More context (default: 50)
 ```
 
-Shows paragraph number and 50 characters of surrounding context.
+Shows paragraph number and surrounding context.
 
 ### footnotes — List footnotes
 
@@ -102,8 +103,9 @@ Compares accepted text paragraph by paragraph.
 ### verify — Check for text loss (main text + footnotes)
 
 ```
-wordcli verify edited.docx --original original.docx              # Remove ALL tracked changes
-wordcli verify edited.docx --original original.docx --author Claude  # Only remove Claude's changes
+wordcli verify edited.docx --original original.docx                    # Remove ALL tracked changes
+wordcli verify edited.docx --original original.docx --author Claude    # Only remove Claude's changes
+wordcli verify edited.docx --original original.docx --truncate 200     # Longer preview lines (default: 120)
 ```
 
 Removes tracked changes from the edited document and compares both main text and footnotes against the original. Without `--author`, all tracked changes are removed. With `--author`, only that author's changes are removed (useful when the document already had tracked changes from other reviewers). Exit code 0 = OK, 1 = text loss detected.
