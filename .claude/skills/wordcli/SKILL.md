@@ -107,7 +107,8 @@ A replace creates paired DEL+INS changes. To fully undo a replace, revert both t
 
 ## Notes
 
-- `replace` and `comment` overwrite the input file by default. Use `-o output.docx` to write to a separate file.
+- If a write command fails with `PermissionError`, the file is likely open in Word. Ask the user to close it or offer to write to a new file with `-o`.
+- `replace`, `comment`, `remove-comment`, and `revert-change` overwrite the input file by default. Use `-o output.docx` to write to a separate file.
 - `--author` defaults to `wordcli`. Set it explicitly (e.g. `--author Claude`) for attribution.
 - `verify` exit code: 0 = OK, 1 = text loss detected. Use `--author` to only remove one author's changes.
 - Without `--accept`, tracked changes show as `[+inserted+]` and `[-deleted-]` in text output.
