@@ -162,6 +162,33 @@ python -m wordcli revert-change document.docx --footnote 3 --occurrence 1 # Reve
 
 Reverts a tracked change: for insertions, the inserted text is removed; for deletions, the original text is restored. If multiple changes match the filters, the command lists all matches and requires `--occurrence` to disambiguate.
 
+### bookmark — Add a bookmark around text
+
+```
+python -m wordcli bookmark document.docx --anchor "Übersicht 1" --name "uebersicht1" --paragraph 11
+python -m wordcli bookmark document.docx --anchor "Figure 1" --name "fig1" --context "Figure 1: Title" -o out.docx
+```
+
+Wraps the matched text with `bookmarkStart`/`bookmarkEnd` markers. Non-destructive — preserves existing elements (including SEQ field codes). Uses the same disambiguation as `replace` (`--paragraph`, `--context`, `--occurrence`).
+
+### crossref — Insert a clickable cross-reference
+
+```
+python -m wordcli crossref document.docx --bookmark fig1 --text "Figure X" --paragraph 5 --display "Figure 1" --author Claude
+python -m wordcli crossref document.docx --bookmark uebersicht1 --text "Übersicht[NBSP]X" --paragraph 9 --display "Übersicht 1"
+```
+
+Replaces the matched text with a clickable REF field pointing to the named bookmark. The replacement is shown as a tracked change (deletion of old text + insertion of REF field). `--display` sets the cached display text shown in the field.
+
+### fields — Show field codes in the document
+
+```
+python -m wordcli fields document.docx        # All fields
+python -m wordcli fields document.docx --seq   # Only SEQ fields (captions)
+```
+
+Lists all field codes (SEQ, REF, TOC, etc.) with their paragraph number, field instruction, and display text. Useful for checking existing caption numbering before adding bookmarks or cross-references.
+
 ## Non-breaking spaces
 
 Non-breaking spaces (U+00A0) are displayed as `[NBSP]` in all text output. When using `--old`, `--new`, `--anchor`, or `--context`, write `[NBSP]` and wordcli converts it back to a real non-breaking space automatically.

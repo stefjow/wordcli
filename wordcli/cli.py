@@ -10,6 +10,7 @@ from .replace import replace_in_docx
 from .comments import add_comment_to_docx
 from .remove_comment import remove_comment_from_docx
 from .revert_change import revert_change_in_docx
+from .crossref import add_bookmark_to_docx, add_crossref_to_docx
 from .formatting import show_nbsp, parse_nbsp, table_to_markdown
 
 
@@ -269,6 +270,58 @@ def cmd_revert_change(args):
         sys.exit(1)
 
 
+def cmd_bookmark(args):
+    output = args.output or args.file
+    anchor = parse_nbsp(args.anchor)
+    context = parse_nbsp(args.context) if args.context else None
+    ok, msg = add_bookmark_to_docx(
+        args.file, output, args.name, anchor,
+        paragraph=args.paragraph,
+        context=context,
+        occurrence=args.occurrence,
+    )
+    if ok:
+        print(msg)
+    else:
+        print(f"Error: {msg}", file=sys.stderr)
+        sys.exit(1)
+
+
+def cmd_crossref(args):
+    output = args.output or args.file
+    text = parse_nbsp(args.text)
+    context = parse_nbsp(args.context) if args.context else None
+    display = parse_nbsp(args.display) if args.display else None
+    ok, msg = add_crossref_to_docx(
+        args.file, output, args.bookmark, text,
+        paragraph=args.paragraph,
+        context=context,
+        occurrence=args.occurrence,
+        display_text=display,
+        author=args.author,
+    )
+    if ok:
+        print(msg)
+    else:
+        print(f"Error: {msg}", file=sys.stderr)
+        sys.exit(1)
+
+
+def cmd_fields(args):
+    doc = DocxReader(args.file)
+    fields = doc.extract_fields()
+    if args.seq:
+        fields = [f for f in fields if f["field_code"].startswith("SEQ")]
+    if not fields:
+        print("No fields found.", file=sys.stderr)
+        return
+    for f in fields:
+        ctx = show_nbsp(f["context"])
+        if len(ctx) > 80:
+            ctx = ctx[:80] + "..."
+        print(f"[{f['paragraph']}] {f['field_code']} = \"{f['display']}\"  ->  {ctx}")
+
+
 def cmd_stats(args):
     doc = DocxReader(args.file)
     s = doc.stats()
@@ -403,6 +456,36 @@ def main():
     p_revert.add_argument("--footnote", type=int, default=None, help="Revert change in footnote N")
     p_revert.add_argument("-o", "--output", default=None, help="Output file (default: overwrite input)")
     p_revert.set_defaults(func=cmd_revert_change)
+
+    # bookmark
+    p_bm = sub.add_parser("bookmark", help="Add a bookmark around text")
+    p_bm.add_argument("file")
+    p_bm.add_argument("--name", required=True, help="Bookmark name (letters, digits, underscores)")
+    p_bm.add_argument("--anchor", required=True, help="Text to wrap with the bookmark")
+    p_bm.add_argument("--paragraph", type=int, default=None, help="Limit to paragraph number")
+    p_bm.add_argument("--context", default=None, help="Unique surrounding text")
+    p_bm.add_argument("--occurrence", type=int, default=None, help="Match the Nth occurrence (1-based)")
+    p_bm.add_argument("-o", "--output", default=None, help="Output file (default: overwrite input)")
+    p_bm.set_defaults(func=cmd_bookmark)
+
+    # crossref
+    p_xref = sub.add_parser("crossref", help="Replace text with a clickable cross-reference")
+    p_xref.add_argument("file")
+    p_xref.add_argument("--bookmark", required=True, help="Bookmark name to reference")
+    p_xref.add_argument("--text", required=True, help="Text to find and replace with the REF field")
+    p_xref.add_argument("--display", default=None, help="Display text for the field (default: same as --text)")
+    p_xref.add_argument("--author", default="wordcli", help="Author name for the tracked change")
+    p_xref.add_argument("--paragraph", type=int, default=None, help="Limit to paragraph number")
+    p_xref.add_argument("--context", default=None, help="Unique surrounding text")
+    p_xref.add_argument("--occurrence", type=int, default=None, help="Match the Nth occurrence (1-based)")
+    p_xref.add_argument("-o", "--output", default=None, help="Output file (default: overwrite input)")
+    p_xref.set_defaults(func=cmd_crossref)
+
+    # fields
+    p_fields = sub.add_parser("fields", help="List document fields (SEQ, REF, etc.)")
+    p_fields.add_argument("file")
+    p_fields.add_argument("--seq", action="store_true", help="Only show SEQ fields")
+    p_fields.set_defaults(func=cmd_fields)
 
     # stats
     p_stats = sub.add_parser("stats", help="Document statistics")

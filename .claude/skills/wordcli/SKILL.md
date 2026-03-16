@@ -4,9 +4,10 @@ description: >
   CLI tool for inspecting and editing Word (.docx) documents via the wordcli command.
   Use when the user asks to edit a docx, review a Word document, inspect a .docx file,
   add comments to a document, replace text with tracked changes, remove comments,
-  revert tracked changes, search document text, extract text or tables, compare
-  documents, verify text integrity, or explicitly mentions wordcli. Supports tracked
-  changes, comments, footnotes, tables, and search.
+  revert tracked changes, add bookmarks, insert cross-references, detect field codes,
+  search document text, extract text or tables, compare documents, verify text
+  integrity, or explicitly mentions wordcli. Supports tracked changes, comments,
+  footnotes, tables, bookmarks, cross-references, field codes, and search.
 ---
 
 # wordcli
@@ -40,6 +41,9 @@ Run via `python -m wordcli <command>`. Use `python -m wordcli --help` or `python
 | `comment <file> --footnote N --text "Y"` | Add comment on footnote reference in main text. `--author`, `-o` |
 | `remove-comment <file> <id>` | Remove a comment by ID. `-o` |
 | `revert-change <file>` | Revert a tracked change. `--author`, `--text`, `--type ins\|del`, `--occurrence`, `--footnote N`, `-o` |
+| `bookmark <file> --anchor "X" --name "id"` | Add bookmark around text. `--paragraph`, `--context`, `--occurrence`, `-o` |
+| `crossref <file> --bookmark "id" --text "X"` | Replace text with clickable REF field (tracked change). `--display`, `--author`, `--paragraph`, `--context`, `--occurrence`, `-o` |
+| `fields <file>` | Show all field codes (SEQ, REF, etc.). `--seq` for SEQ fields only |
 
 ## Key workflow: search before replace/comment
 
@@ -104,6 +108,16 @@ python -m wordcli revert-change document.docx --author Claude --occurrence 3
 ```
 
 A replace creates paired DEL+INS changes. To fully undo a replace, revert both the DEL (restores original) and the INS (removes replacement).
+
+## Cross-references workflow
+
+To replace placeholders (e.g. "Abbildung X") with clickable cross-references:
+
+1. Check existing field codes: `fields <file> --seq` to find SEQ-numbered captions
+2. Add bookmarks to the targets: `bookmark <file> --anchor "Übersicht 1" --name "uebersicht1" --paragraph 11`
+3. Replace placeholders with REF fields: `crossref <file> --bookmark uebersicht1 --text "Übersicht[NBSP]X" --paragraph 9 --display "Übersicht 1" --author Claude`
+
+Important: do crossrefs BEFORE text corrections, since `crossref` cannot find text inside tracked changes.
 
 ## Notes
 

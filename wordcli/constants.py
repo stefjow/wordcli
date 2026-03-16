@@ -38,6 +38,12 @@ VMERGE_TAG = f"{{{W_NS}}}vMerge"
 BODY_TAG = f"{{{W_NS}}}body"
 SECTPR_TAG = f"{{{W_NS}}}sectPr"
 XML_SPACE_ATTR = "{http://www.w3.org/XML/1998/namespace}space"
+BOOKMARK_START_TAG = f"{{{W_NS}}}bookmarkStart"
+BOOKMARK_END_TAG = f"{{{W_NS}}}bookmarkEnd"
+FLDCHAR_TAG = f"{{{W_NS}}}fldChar"
+FLDCHARTYPE_ATTR = f"{{{W_NS}}}fldCharType"
+INSTRTEXT_TAG = f"{{{W_NS}}}instrText"
+NAME_ATTR = f"{{{W_NS}}}name"
 
 # Register namespaces so ET.tostring() uses proper prefixes instead of ns0:
 _ns_registered = set()

@@ -9,6 +9,7 @@ from .constants import (
     T_TAG, TBL_TAG, TR_TAG, TC_TAG, TCPR_TAG, GRIDSPAN_TAG, VMERGE_TAG,
     SECTPR_TAG, FOOTNOTE_TAG, FOOTNOTE_REF_TAG, PPR_TAG, PSTYLE_TAG,
     AUTHOR_ATTR, DATE_ATTR, ID_ATTR, VAL_ATTR, HEADING_RE,
+    FLDCHAR_TAG, FLDCHARTYPE_ATTR, INSTRTEXT_TAG,
 )
 from .formatting import table_to_markdown
 
@@ -217,6 +218,76 @@ class DocxReader:
                 "date": date,
                 "text": " ".join(parts).strip(),
             })
+        return result
+
+    def extract_fields(self):
+        """Return list of {paragraph, field_code, display_text, context}.
+
+        Finds all field codes (SEQ, REF, etc.) in the document.
+        """
+        root = self._parse_xml("word/document.xml")
+        if root is None:
+            return []
+        body = root.find(BODY_TAG)
+        if body is None:
+            return []
+
+        result = []
+        nr = 0
+        for p in body.iter(P_TAG):
+            nr += 1
+            # Walk runs looking for fldChar begin/separate/end sequences
+            runs = list(p)
+            i = 0
+            while i < len(runs):
+                if runs[i].tag != R_TAG:
+                    i += 1
+                    continue
+                # Check for fldChar begin
+                fc = runs[i].find(FLDCHAR_TAG)
+                if fc is not None and fc.get(FLDCHARTYPE_ATTR) == "begin":
+                    # Collect instrText
+                    field_code = ""
+                    display_parts = []
+                    j = i + 1
+                    in_display = False
+                    while j < len(runs):
+                        if runs[j].tag == R_TAG:
+                            fc2 = runs[j].find(FLDCHAR_TAG)
+                            if fc2 is not None:
+                                fct = fc2.get(FLDCHARTYPE_ATTR)
+                                if fct == "separate":
+                                    in_display = True
+                                elif fct == "end":
+                                    break
+                            else:
+                                instr = runs[j].find(INSTRTEXT_TAG)
+                                if instr is not None and instr.text and not in_display:
+                                    field_code += instr.text
+                                elif in_display:
+                                    for t in runs[j].iter(T_TAG):
+                                        if t.text:
+                                            display_parts.append(t.text)
+                        j += 1
+
+                    # Get paragraph context
+                    p_texts = []
+                    for t in p.iter(T_TAG):
+                        if t.text:
+                            p_texts.append(t.text)
+                    context = "".join(p_texts)
+
+                    if field_code.strip():
+                        result.append({
+                            "paragraph": nr,
+                            "field_code": field_code.strip(),
+                            "display": "".join(display_parts),
+                            "context": context,
+                        })
+                    i = j + 1
+                else:
+                    i += 1
+
         return result
 
     def extract_changes(self):
