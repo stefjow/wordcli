@@ -67,9 +67,9 @@ python -m wordcli footnotes document.docx 3      # Single footnote by ID
 ### comments — List comments
 
 ```
-python -m python -m wordcli comments document.docx
-python -m python -m wordcli comments document.docx --author Claude
-python -m python -m wordcli comments document.docx --json
+python -m wordcli comments document.docx
+python -m wordcli comments document.docx --author Claude
+python -m wordcli comments document.docx --json
 ```
 
 ### changes — Show tracked changes
@@ -141,6 +141,26 @@ python -m wordcli comment document.docx --footnote 3 --text "Check this footnote
 Adds a comment anchored to the matched text, visible in Word's review pane. Uses the same disambiguation as `replace` (`--paragraph`, `--context`, `--occurrence`). If the anchor text matches multiple locations without scoping, the command refuses and lists all matches.
 
 Use `--footnote N` (without `--anchor`) to place the comment on the footnote reference number in the main text.
+
+### remove-comment — Remove a comment by ID
+
+```
+python -m wordcli remove-comment document.docx 5              # Remove comment with ID 5
+python -m wordcli remove-comment document.docx 5 -o out.docx  # Write to separate file
+```
+
+Removes the comment and its range markers from the document. Use `comments` to find the ID.
+
+### revert-change — Revert a tracked change
+
+```
+python -m wordcli revert-change document.docx --text "typo" --type del    # Revert a specific deletion
+python -m wordcli revert-change document.docx --author Claude --occurrence 1  # Revert first change by Claude
+python -m wordcli revert-change document.docx --text "fixed" --type ins   # Remove an insertion
+python -m wordcli revert-change document.docx --footnote 3 --occurrence 1 # Revert change in footnote
+```
+
+Reverts a tracked change: for insertions, the inserted text is removed; for deletions, the original text is restored. If multiple changes match the filters, the command lists all matches and requires `--occurrence` to disambiguate.
 
 ## Non-breaking spaces
 

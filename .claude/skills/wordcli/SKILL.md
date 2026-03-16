@@ -3,9 +3,10 @@ name: wordcli
 description: >
   CLI tool for inspecting and editing Word (.docx) documents via the wordcli command.
   Use when the user asks to edit a docx, review a Word document, inspect a .docx file,
-  add comments to a document, replace text with tracked changes, search document text,
-  extract text or tables, compare documents, verify text integrity, or explicitly
-  mentions wordcli. Supports tracked changes, comments, footnotes, tables, and search.
+  add comments to a document, replace text with tracked changes, remove comments,
+  revert tracked changes, search document text, extract text or tables, compare
+  documents, verify text integrity, or explicitly mentions wordcli. Supports tracked
+  changes, comments, footnotes, tables, and search.
 ---
 
 # wordcli
@@ -37,6 +38,8 @@ Run via `python -m wordcli <command>`. Use `python -m wordcli --help` or `python
 | `replace <file> --old "X" --new "Y"` | Replace as tracked change. `--author`, `--paragraph`, `--context`, `--occurrence`, `--footnote N`, `-o` |
 | `comment <file> --anchor "X" --text "Y"` | Add comment anchored to text. `--author`, `--paragraph`, `--context`, `--occurrence`, `-o` |
 | `comment <file> --footnote N --text "Y"` | Add comment on footnote reference in main text. `--author`, `-o` |
+| `remove-comment <file> <id>` | Remove a comment by ID. `-o` |
+| `revert-change <file>` | Revert a tracked change. `--author`, `--text`, `--type ins\|del`, `--occurrence`, `--footnote N`, `-o` |
 
 ## Key workflow: search before replace/comment
 
@@ -81,6 +84,26 @@ To comment on a footnote, use `--footnote N` without `--anchor` — the comment 
 ```bash
 python -m wordcli comment document.docx --footnote 3 --text "Check this" --author Claude
 ```
+
+## Undoing mistakes
+
+Use `remove-comment` and `revert-change` to fix errors without rebuilding the document:
+
+```bash
+# List comments to find the ID, then remove it
+python -m wordcli comments document.docx
+python -m wordcli remove-comment document.docx 5
+
+# List changes, then revert a specific one
+python -m wordcli changes document.docx
+python -m wordcli revert-change document.docx --text "typo" --type del
+python -m wordcli revert-change document.docx --text "typo" --type ins
+
+# Revert by occurrence when multiple match
+python -m wordcli revert-change document.docx --author Claude --occurrence 3
+```
+
+A replace creates paired DEL+INS changes. To fully undo a replace, revert both the DEL (restores original) and the INS (removes replacement).
 
 ## Notes
 

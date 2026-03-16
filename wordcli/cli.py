@@ -8,6 +8,8 @@ import sys
 from .reader import DocxReader
 from .replace import replace_in_docx
 from .comments import add_comment_to_docx
+from .remove_comment import remove_comment_from_docx
+from .revert_change import revert_change_in_docx
 from .formatting import show_nbsp, parse_nbsp, table_to_markdown
 
 
@@ -240,6 +242,33 @@ def cmd_comment(args):
         sys.exit(1)
 
 
+def cmd_remove_comment(args):
+    output = args.output or args.file
+    ok, msg = remove_comment_from_docx(args.file, output, args.id)
+    if ok:
+        print(msg)
+    else:
+        print(f"Error: {msg}", file=sys.stderr)
+        sys.exit(1)
+
+
+def cmd_revert_change(args):
+    output = args.output or args.file
+    ok, msg = revert_change_in_docx(
+        args.file, output,
+        author=args.author,
+        text=parse_nbsp(args.text) if args.text else None,
+        occurrence=args.occurrence,
+        change_type=args.type,
+        footnote=args.footnote,
+    )
+    if ok:
+        print(msg)
+    else:
+        print(f"Error: {msg}", file=sys.stderr)
+        sys.exit(1)
+
+
 def cmd_stats(args):
     doc = DocxReader(args.file)
     s = doc.stats()
@@ -356,6 +385,24 @@ def main():
     p_comment.add_argument("--footnote", type=int, default=None, help="Comment on footnote N (anchors to footnote reference in main text)")
     p_comment.add_argument("-o", "--output", default=None, help="Output file (default: overwrite input)")
     p_comment.set_defaults(func=cmd_comment)
+
+    # remove-comment
+    p_rmcom = sub.add_parser("remove-comment", help="Remove a comment by ID")
+    p_rmcom.add_argument("file")
+    p_rmcom.add_argument("id", type=int, help="Comment ID to remove")
+    p_rmcom.add_argument("-o", "--output", default=None, help="Output file (default: overwrite input)")
+    p_rmcom.set_defaults(func=cmd_remove_comment)
+
+    # revert-change
+    p_revert = sub.add_parser("revert-change", help="Revert a tracked change")
+    p_revert.add_argument("file")
+    p_revert.add_argument("--author", default=None, help="Filter by author")
+    p_revert.add_argument("--text", default=None, help="Filter by content text")
+    p_revert.add_argument("--type", choices=["ins", "del"], default=None, help="Filter by change type (ins or del)")
+    p_revert.add_argument("--occurrence", type=int, default=None, help="Pick the Nth matching change (1-based)")
+    p_revert.add_argument("--footnote", type=int, default=None, help="Revert change in footnote N")
+    p_revert.add_argument("-o", "--output", default=None, help="Output file (default: overwrite input)")
+    p_revert.set_defaults(func=cmd_revert_change)
 
     # stats
     p_stats = sub.add_parser("stats", help="Document statistics")
