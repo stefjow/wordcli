@@ -2,25 +2,13 @@
 
 CLI tool for inspecting and editing Word (.docx) documents. No dependencies beyond Python 3 stdlib.
 
-## Installation
-
-```
-pixi add --path .
-```
-
-Or without pixi:
-
-```
-pip install -e .
-```
-
 ## Usage
 
 ```
 python -m wordcli <command> [options]
 ```
 
-After `pip install -e .`, also available as `wordcli <command>`. Legacy `python wordcli.py` still works.
+No installation required. Optionally run `pip install -e .` to get a `wordcli` command on PATH.
 
 ```
 python -m wordcli --help              # List all commands
