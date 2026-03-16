@@ -124,3 +124,14 @@ Scoping options to avoid ambiguous matches:
 - `--context "..."`: Provide a longer unique string that contains `--old`; only the `--old` portion is replaced
 
 Without `-o`, the input file is overwritten. With `-o`, a new file is created.
+
+### comment — Add a comment anchored to text
+
+```
+wordcli comment document.docx --anchor "some phrase" --text "Please review" --author Claude
+wordcli comment document.docx --anchor "word" --text "Clarify this" --paragraph 5
+wordcli comment document.docx --anchor "X" --text "Update number" --context "Figure X)" --author Claude
+wordcli comment document.docx --anchor "phrase" --text "Note" -o output.docx
+```
+
+Adds a comment anchored to the matched text, visible in Word's review pane. Uses the same scoping options as `replace` (`--paragraph`, `--context`) to target specific occurrences.

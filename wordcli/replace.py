@@ -3,6 +3,7 @@
 import copy
 import os
 import re
+import shutil
 import tempfile
 import zipfile
 import xml.etree.ElementTree as ET
@@ -362,6 +363,6 @@ def replace_in_docx(input_path, output_path, old_text, new_text, author,
                     zout.writestr(item, zin.read(item.filename))
 
     if use_temp:
-        os.replace(dest, output_path)
+        shutil.move(dest, output_path)
 
     return True, f"Replaced in {output_path}"

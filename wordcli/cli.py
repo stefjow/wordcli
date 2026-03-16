@@ -7,6 +7,7 @@ import sys
 
 from .reader import DocxReader
 from .replace import replace_in_docx
+from .comments import add_comment_to_docx
 from .formatting import show_nbsp, parse_nbsp, table_to_markdown
 
 
@@ -213,6 +214,23 @@ def cmd_replace(args):
         sys.exit(1)
 
 
+def cmd_comment(args):
+    output = args.output or args.file
+    anchor = parse_nbsp(args.anchor)
+    context = parse_nbsp(args.context) if args.context else None
+    ok, msg = add_comment_to_docx(
+        args.file, output, anchor, args.text,
+        author=args.author,
+        paragraph=args.paragraph,
+        context=context,
+    )
+    if ok:
+        print(msg)
+    else:
+        print(f"Error: {msg}", file=sys.stderr)
+        sys.exit(1)
+
+
 def cmd_stats(args):
     doc = DocxReader(args.file)
     s = doc.stats()
@@ -309,6 +327,17 @@ def main():
     p_rep.add_argument("--context", default=None, help="Unique surrounding text to locate the match")
     p_rep.add_argument("-o", "--output", default=None, help="Output file (default: overwrite input)")
     p_rep.set_defaults(func=cmd_replace)
+
+    # comment
+    p_comment = sub.add_parser("comment", help="Add a comment anchored to text")
+    p_comment.add_argument("file")
+    p_comment.add_argument("--anchor", required=True, help="Text to anchor the comment to")
+    p_comment.add_argument("--text", required=True, help="Comment text")
+    p_comment.add_argument("--author", default="wordcli", help="Author name for the comment")
+    p_comment.add_argument("--paragraph", type=int, default=None, help="Limit to paragraph number")
+    p_comment.add_argument("--context", default=None, help="Unique surrounding text to locate the anchor")
+    p_comment.add_argument("-o", "--output", default=None, help="Output file (default: overwrite input)")
+    p_comment.set_defaults(func=cmd_comment)
 
     # stats
     p_stats = sub.add_parser("stats", help="Document statistics")
