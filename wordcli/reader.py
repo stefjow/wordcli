@@ -139,7 +139,7 @@ class DocxReader:
         nr = 0
         for p in body.iter(P_TAG):
             nr += 1
-            text = self._text_from_element(p, accept_changes)
+            text = self._text_from_element(p, accept_changes, footnote_markers=True)
             result.append((nr, text))
         return result
 
