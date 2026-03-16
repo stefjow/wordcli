@@ -17,15 +17,7 @@ from .constants import (
     XML_SPACE_ATTR, PPR_TAG, PSTYLE_TAG,
     _register_namespaces,
 )
-
-
-def _get_run_text(run):
-    """Get concatenated text from all w:t elements in a run."""
-    parts = []
-    for sub in run:
-        if sub.tag == T_TAG and sub.text:
-            parts.append(sub.text)
-    return "".join(parts)
+from .matching import find_matching_paragraphs, select_match, get_run_text
 
 
 def _clone_run_with_text(run, text):
@@ -40,15 +32,6 @@ def _clone_run_with_text(run, text):
         t.set(XML_SPACE_ATTR, "preserve")
     new_run.append(t)
     return new_run
-
-
-def _get_paragraph_plain_text(p_elem):
-    """Get plain text from direct runs in a paragraph (skipping ins/del)."""
-    parts = []
-    for child in p_elem:
-        if child.tag == R_TAG:
-            parts.append(_get_run_text(child))
-    return "".join(parts)
 
 
 def _find_max_id(root):
@@ -95,7 +78,7 @@ def _add_comment_to_paragraph(p_elem, anchor_text, comment_id, context=None):
     run_info = []  # (run_elem, text)
     for child in p_elem:
         if child.tag == R_TAG:
-            text = _get_run_text(child)
+            text = get_run_text(child)
             run_info.append((child, text))
 
     if not run_info:
@@ -358,7 +341,7 @@ def _create_empty_comments_xml():
 
 
 def add_comment_to_docx(input_path, output_path, anchor_text, comment_text,
-                         author, paragraph=None, context=None):
+                         author, paragraph=None, context=None, occurrence=None):
     """Add a comment anchored to anchor_text in the document.
 
     Returns (success, message).
@@ -388,44 +371,28 @@ def add_comment_to_docx(input_path, output_path, anchor_text, comment_text,
 
     comment_id = max(doc_max_id, comment_max_id) + 1
 
-    # Find target paragraph
-    all_paragraphs = list(body.iter(P_TAG))
+    # Find and validate matches
+    matches, err = find_matching_paragraphs(body, anchor_text, paragraph, context)
+    if err:
+        return False, err
 
-    if paragraph is not None:
-        if paragraph < 1 or paragraph > len(all_paragraphs):
-            return False, f"Paragraph {paragraph} out of range (1-{len(all_paragraphs)})"
-        candidates = [all_paragraphs[paragraph - 1]]
-    else:
-        candidates = all_paragraphs
+    p_elem, _, err = select_match(matches, anchor_text, occurrence)
+    if err:
+        return False, err
 
-    # Find and modify the target paragraph
-    added = False
-    target_p = None
+    # Save original run texts for locating in raw XML
+    orig_run_texts = []
+    for child in p_elem:
+        if child.tag == R_TAG:
+            for sub in child:
+                if sub.tag == T_TAG and sub.text:
+                    orig_run_texts.append(sub.text)
 
-    for p_elem in candidates:
-        p_text = _get_paragraph_plain_text(p_elem)
-        if anchor_text not in p_text:
-            continue
-        if context is not None and context not in p_text:
-            continue
-
-        # Save original run texts for locating in raw XML
-        orig_run_texts = []
-        for child in p_elem:
-            if child.tag == R_TAG:
-                for sub in child:
-                    if sub.tag == T_TAG and sub.text:
-                        orig_run_texts.append(sub.text)
-
-        success = _add_comment_to_paragraph(p_elem, anchor_text, comment_id, context)
-        if success:
-            added = True
-            target_p = p_elem
-            target_run_texts = orig_run_texts
-            break
-
-    if not added:
+    success = _add_comment_to_paragraph(p_elem, anchor_text, comment_id, context)
+    if not success:
         return False, "Anchor text not found"
+
+    target_run_texts = orig_run_texts
 
     # Splice modified paragraph into raw document XML
     raw_str = raw_doc.decode("utf-8")
@@ -441,7 +408,7 @@ def add_comment_to_docx(input_path, output_path, anchor_text, comment_text,
         return False, "Could not locate paragraph in raw XML for splicing"
 
     start, end = span
-    new_p_xml = _serialize_paragraph(target_p)
+    new_p_xml = _serialize_paragraph(p_elem)
     output_str = raw_str[:start] + new_p_xml + raw_str[end:]
     output_doc_bytes = output_str.encode("utf-8")
 

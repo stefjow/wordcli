@@ -14,6 +14,7 @@ from .constants import (
     RPR_TAG, AUTHOR_ATTR, DATE_ATTR, ID_ATTR, XML_SPACE_ATTR,
     _register_namespaces,
 )
+from .matching import find_matching_paragraphs, select_match
 
 
 def _make_t_elem(text):
@@ -271,7 +272,7 @@ def _find_paragraph_in_raw(raw_xml, p_elem):
 
 
 def replace_in_docx(input_path, output_path, old_text, new_text, author,
-                    paragraph=None, context=None):
+                    paragraph=None, context=None, occurrence=None):
     """Replace old_text with new_text as a tracked change.
 
     Returns (success, message).
@@ -287,46 +288,32 @@ def replace_in_docx(input_path, output_path, old_text, new_text, author,
     if body is None:
         return False, "Could not find document body"
 
-    # Collect all paragraphs (including inside tables)
-    all_paragraphs = list(body.iter(P_TAG))
+    # Find and validate matches
+    matches, err = find_matching_paragraphs(body, old_text, paragraph, context)
+    if err:
+        return False, err
 
-    if paragraph is not None:
-        if paragraph < 1 or paragraph > len(all_paragraphs):
-            return False, f"Paragraph {paragraph} out of range (1-{len(all_paragraphs)})"
-        candidates = [all_paragraphs[paragraph - 1]]
-    else:
-        candidates = all_paragraphs
+    p_elem, _, err = select_match(matches, old_text, occurrence)
+    if err:
+        return False, err
 
     rev_id = _find_max_revision_id(root) + 1
-    replaced = False
-    target_p = None
 
-    for p_elem in candidates:
-        # Quick check: does this paragraph contain the text?
-        p_text = _get_paragraph_plain_text(p_elem)
-        if old_text not in p_text:
-            continue
-        if context is not None and context not in p_text:
-            continue
+    # Save original run texts for locating in raw XML
+    orig_run_texts = []
+    for child in p_elem:
+        if child.tag == R_TAG:
+            for sub in child:
+                if sub.tag == T_TAG and sub.text:
+                    orig_run_texts.append(sub.text)
 
-        # Save original run texts for locating in raw XML
-        orig_run_texts = []
-        for child in p_elem:
-            if child.tag == R_TAG:
-                for sub in child:
-                    if sub.tag == T_TAG and sub.text:
-                        orig_run_texts.append(sub.text)
-
-        success, rev_id = _replace_in_paragraph(
-            p_elem, old_text, new_text, author, date_str, rev_id, context)
-        if success:
-            replaced = True
-            target_p = p_elem
-            target_run_texts = orig_run_texts
-            break
-
-    if not replaced:
+    success, rev_id = _replace_in_paragraph(
+        p_elem, old_text, new_text, author, date_str, rev_id, context)
+    if not success:
         return False, "Text not found"
+
+    target_p = p_elem
+    target_run_texts = orig_run_texts
 
     # Locate the original paragraph in raw XML and splice in the modified version
     raw_str = raw_doc.decode("utf-8")

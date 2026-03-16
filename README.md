@@ -121,9 +121,10 @@ wordcli replace document.docx --old "word" --new "term" -o output.docx
 
 Replaces text as a tracked change (insertion + deletion) visible in Word's review mode. Handles text that spans multiple runs.
 
-Scoping options to avoid ambiguous matches:
+If the text matches multiple locations, the command refuses with an error listing all matches. Scoping options to disambiguate:
 - `--paragraph N`: Only search in paragraph N (use `text` or `search` to find the number)
 - `--context "..."`: Provide a longer unique string that contains `--old`; only the `--old` portion is replaced
+- `--occurrence N`: Select the Nth match (1-based)
 
 Without `-o`, the input file is overwritten. With `-o`, a new file is created.
 
@@ -133,7 +134,7 @@ Without `-o`, the input file is overwritten. With `-o`, a new file is created.
 wordcli comment document.docx --anchor "some phrase" --text "Please review" --author Claude
 wordcli comment document.docx --anchor "word" --text "Clarify this" --paragraph 5
 wordcli comment document.docx --anchor "X" --text "Update number" --context "Figure X)" --author Claude
-wordcli comment document.docx --anchor "phrase" --text "Note" -o output.docx
+wordcli comment document.docx --anchor "phrase" --text "Note" --occurrence 2
 ```
 
-Adds a comment anchored to the matched text, visible in Word's review pane. Uses the same scoping options as `replace` (`--paragraph`, `--context`) to target specific occurrences.
+Adds a comment anchored to the matched text, visible in Word's review pane. Uses the same disambiguation as `replace` (`--paragraph`, `--context`, `--occurrence`). If the anchor text matches multiple locations without scoping, the command refuses and lists all matches.

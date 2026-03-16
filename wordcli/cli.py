@@ -208,6 +208,7 @@ def cmd_replace(args):
         author=args.author,
         paragraph=args.paragraph,
         context=context,
+        occurrence=args.occurrence,
     )
     if ok:
         print(msg)
@@ -225,6 +226,7 @@ def cmd_comment(args):
         author=args.author,
         paragraph=args.paragraph,
         context=context,
+        occurrence=args.occurrence,
     )
     if ok:
         print(msg)
@@ -329,6 +331,7 @@ def main():
     p_rep.add_argument("--author", default="wordcli", help="Author name for the change")
     p_rep.add_argument("--paragraph", type=int, default=None, help="Limit to paragraph number")
     p_rep.add_argument("--context", default=None, help="Unique surrounding text to locate the match")
+    p_rep.add_argument("--occurrence", type=int, default=None, help="Match the Nth occurrence (1-based)")
     p_rep.add_argument("-o", "--output", default=None, help="Output file (default: overwrite input)")
     p_rep.set_defaults(func=cmd_replace)
 
@@ -340,6 +343,7 @@ def main():
     p_comment.add_argument("--author", default="wordcli", help="Author name for the comment")
     p_comment.add_argument("--paragraph", type=int, default=None, help="Limit to paragraph number")
     p_comment.add_argument("--context", default=None, help="Unique surrounding text to locate the anchor")
+    p_comment.add_argument("--occurrence", type=int, default=None, help="Match the Nth occurrence (1-based)")
     p_comment.add_argument("-o", "--output", default=None, help="Output file (default: overwrite input)")
     p_comment.set_defaults(func=cmd_comment)
 
