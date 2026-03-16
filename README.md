@@ -45,7 +45,10 @@ python -m wordcli text document.docx --paragraphs 3-7   # Range
 python -m wordcli text document.docx --accept           # Accepted text only (no change markers)
 ```
 
-Tracked changes are shown as `[+inserted+]` and `[-deleted-]` by default. Footnote references appear inline as `[^N]` (e.g. `...text.[^3]) More text...`).
+Tracked changes are shown as `[+inserted+]` and `[-deleted-]` by default. Inline markers use markdown-style syntax:
+- Footnote references: `[^N]` (e.g. `...text.[^3]) More text...`)
+- Field codes: `[display](FIELD instruction)` (e.g. `[1](SEQ Übersicht \* ARABIC)`, `[Abbildung 1](REF _Ref_fig1 \h)`)
+- Hyperlinks: `[text](url)`
 
 ### search — Search with context
 

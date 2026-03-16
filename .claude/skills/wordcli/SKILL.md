@@ -77,7 +77,12 @@ python -m wordcli replace document.docx --old "100[NBSP]000" --new "100[NBSP]001
 
 ## Footnotes
 
-Footnote references appear inline in `text` output as `[^N]` (e.g. `...ist.[^2]) Durch...`). This helps locate text adjacent to footnote markers for replacements.
+Inline elements in `text` output use markdown-style markers:
+- Footnote references: `[^N]` (e.g. `...ist.[^2]) Durch...`)
+- Field codes: `[display](FIELD instruction)` (e.g. `[1](SEQ Übersicht \* ARABIC)`, `[Abbildung 1](REF _Ref_fig1 \h)`)
+- Hyperlinks: `[text](url)`
+
+Field markers help identify text that is a field (don't replace with `replace` — use `crossref` instead).
 
 Use `footnotes <file>` to list footnote text. To replace within a footnote, use `--footnote N`:
 
