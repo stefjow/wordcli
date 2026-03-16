@@ -13,6 +13,7 @@ No installation required. Optionally run `pip install -e .` to get a `wordcli` c
 ```
 python -m wordcli --help              # List all commands
 python -m wordcli <command> --help    # Show flags for a specific command
+python -m wordcli --version           # Show version
 ```
 
 ## Commands
