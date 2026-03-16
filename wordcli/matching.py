@@ -1,6 +1,6 @@
 """Shared logic for finding text matches in paragraphs."""
 
-from .constants import P_TAG, R_TAG, T_TAG, BODY_TAG
+from .constants import P_TAG, R_TAG, T_TAG, BODY_TAG, FOOTNOTE_TAG, ID_ATTR
 
 
 def get_run_text(run):
@@ -84,3 +84,32 @@ def select_match(matches, search_text, occurrence=None):
         lines.append(f"  [{para_nr}] {snippet}")
     lines.append("Use --paragraph, --context, or --occurrence to disambiguate.")
     return None, None, "\n".join(lines)
+
+
+def find_matching_paragraphs_in_footnote(fn_root, footnote_id, search_text, context=None):
+    """Find paragraphs containing search_text within a specific footnote.
+
+    Returns (matches, error_message) where matches is list of (label, p_elem, snippet).
+    """
+    for fn in fn_root.findall(f".//{FOOTNOTE_TAG}"):
+        fn_id = fn.get(ID_ATTR)
+        if fn_id is not None and int(fn_id) == footnote_id:
+            paragraphs = list(fn.findall(f".//{P_TAG}"))
+            matches = []
+            for i, p_elem in enumerate(paragraphs):
+                p_text = get_paragraph_plain_text(p_elem)
+                if search_text not in p_text:
+                    continue
+                if context is not None and context not in p_text:
+                    continue
+                idx = p_text.find(search_text)
+                start = max(0, idx - 30)
+                end = min(len(p_text), idx + len(search_text) + 30)
+                snippet = p_text[start:end]
+                if start > 0:
+                    snippet = "..." + snippet
+                if end < len(p_text):
+                    snippet = snippet + "..."
+                matches.append((f"fn{footnote_id}", p_elem, snippet))
+            return matches, None
+    return None, f"Footnote {footnote_id} not found"

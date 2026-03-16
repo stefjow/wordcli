@@ -122,6 +122,12 @@ If the text matches multiple locations, the command refuses with an error listin
 
 Without `-o`, the input file is overwritten. With `-o`, a new file is created.
 
+Use `--footnote N` to replace within a footnote instead of the main text:
+
+```
+python -m wordcli replace document.docx --old "typo" --new "fixed" --author Claude --footnote 3
+```
+
 ### comment — Add a comment anchored to text
 
 ```
@@ -129,9 +135,12 @@ python -m wordcli comment document.docx --anchor "some phrase" --text "Please re
 python -m wordcli comment document.docx --anchor "word" --text "Clarify this" --paragraph 5
 python -m wordcli comment document.docx --anchor "X" --text "Update number" --context "Figure X)" --author Claude
 python -m wordcli comment document.docx --anchor "phrase" --text "Note" --occurrence 2
+python -m wordcli comment document.docx --footnote 3 --text "Check this footnote" --author Claude
 ```
 
 Adds a comment anchored to the matched text, visible in Word's review pane. Uses the same disambiguation as `replace` (`--paragraph`, `--context`, `--occurrence`). If the anchor text matches multiple locations without scoping, the command refuses and lists all matches.
+
+Use `--footnote N` (without `--anchor`) to place the comment on the footnote reference number in the main text.
 
 ## Non-breaking spaces
 

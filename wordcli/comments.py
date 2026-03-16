@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from .constants import (
     W_NS, BODY_TAG, P_TAG, R_TAG, T_TAG, RPR_TAG, RSTYLE_TAG,
     COMMENT_TAG, COMMENT_RANGE_START_TAG, COMMENT_RANGE_END_TAG,
-    COMMENT_REFERENCE_TAG, ANNOTATION_REF_TAG,
+    COMMENT_REFERENCE_TAG, ANNOTATION_REF_TAG, FOOTNOTE_REF_TAG,
     AUTHOR_ATTR, DATE_ATTR, ID_ATTR, INITIALS_ATTR, VAL_ATTR,
     XML_SPACE_ATTR, PPR_TAG, PSTYLE_TAG,
     _register_namespaces,
@@ -340,8 +340,65 @@ def _create_empty_comments_xml():
     ).encode("utf-8")
 
 
+def _add_comment_to_footnote_ref(body, footnote_id, comment_id):
+    """Insert commentRangeStart/End markers around the footnote reference run.
+
+    Finds the run containing <w:footnoteReference w:id="footnote_id"/> and wraps it.
+    Returns (success, p_elem_modified, orig_run_texts).
+    """
+    for p_elem in body.iter(P_TAG):
+        children = list(p_elem)
+        for idx, child in enumerate(children):
+            if child.tag != R_TAG:
+                continue
+            # Check if this run contains the footnote reference
+            fn_ref = None
+            for sub in child:
+                if sub.tag == FOOTNOTE_REF_TAG:
+                    ref_id = sub.get(ID_ATTR)
+                    if ref_id is not None and int(ref_id) == footnote_id:
+                        fn_ref = sub
+                        break
+            if fn_ref is None:
+                continue
+
+            # Save original run texts for raw XML matching
+            orig_run_texts = []
+            for c in p_elem:
+                if c.tag == R_TAG:
+                    for sub in c:
+                        if sub.tag == T_TAG and sub.text:
+                            orig_run_texts.append(sub.text)
+
+            # Insert comment markers around this run
+            range_start = ET.Element(COMMENT_RANGE_START_TAG)
+            range_start.set(ID_ATTR, str(comment_id))
+
+            range_end = ET.Element(COMMENT_RANGE_END_TAG)
+            range_end.set(ID_ATTR, str(comment_id))
+
+            ref_run = ET.Element(R_TAG)
+            ref_rpr = ET.SubElement(ref_run, RPR_TAG)
+            ref_style = ET.SubElement(ref_rpr, RSTYLE_TAG)
+            ref_style.set(VAL_ATTR, "CommentReference")
+            ref_ref = ET.SubElement(ref_run, COMMENT_REFERENCE_TAG)
+            ref_ref.set(ID_ATTR, str(comment_id))
+
+            # Insert: rangeStart before the run, rangeEnd + refRun after
+            p_elem.insert(idx, range_start)
+            # After inserting rangeStart, the run moved to idx+1
+            run_pos = idx + 1
+            p_elem.insert(run_pos + 1, range_end)
+            p_elem.insert(run_pos + 2, ref_run)
+
+            return True, p_elem, orig_run_texts
+
+    return False, None, None
+
+
 def add_comment_to_docx(input_path, output_path, anchor_text, comment_text,
-                         author, paragraph=None, context=None, occurrence=None):
+                         author, paragraph=None, context=None, occurrence=None,
+                         footnote=None):
     """Add a comment anchored to anchor_text in the document.
 
     Returns (success, message).
@@ -371,28 +428,33 @@ def add_comment_to_docx(input_path, output_path, anchor_text, comment_text,
 
     comment_id = max(doc_max_id, comment_max_id) + 1
 
-    # Find and validate matches
-    matches, err = find_matching_paragraphs(body, anchor_text, paragraph, context)
-    if err:
-        return False, err
+    if footnote:
+        # Anchor comment on the footnote reference in the main text
+        success, p_elem, target_run_texts = _add_comment_to_footnote_ref(
+            body, footnote, comment_id)
+        if not success:
+            return False, f"Footnote {footnote} reference not found in document"
+    else:
+        # Normal text-anchored comment
+        matches, err = find_matching_paragraphs(body, anchor_text, paragraph, context)
+        if err:
+            return False, err
 
-    p_elem, _, err = select_match(matches, anchor_text, occurrence)
-    if err:
-        return False, err
+        p_elem, _, err = select_match(matches, anchor_text, occurrence)
+        if err:
+            return False, err
 
-    # Save original run texts for locating in raw XML
-    orig_run_texts = []
-    for child in p_elem:
-        if child.tag == R_TAG:
-            for sub in child:
-                if sub.tag == T_TAG and sub.text:
-                    orig_run_texts.append(sub.text)
+        # Save original run texts for locating in raw XML
+        target_run_texts = []
+        for child in p_elem:
+            if child.tag == R_TAG:
+                for sub in child:
+                    if sub.tag == T_TAG and sub.text:
+                        target_run_texts.append(sub.text)
 
-    success = _add_comment_to_paragraph(p_elem, anchor_text, comment_id, context)
-    if not success:
-        return False, "Anchor text not found"
-
-    target_run_texts = orig_run_texts
+        success = _add_comment_to_paragraph(p_elem, anchor_text, comment_id, context)
+        if not success:
+            return False, "Anchor text not found"
 
     # Splice modified paragraph into raw document XML
     raw_str = raw_doc.decode("utf-8")

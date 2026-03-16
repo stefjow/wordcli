@@ -209,6 +209,7 @@ def cmd_replace(args):
         paragraph=args.paragraph,
         context=context,
         occurrence=args.occurrence,
+        footnote=args.footnote,
     )
     if ok:
         print(msg)
@@ -219,7 +220,10 @@ def cmd_replace(args):
 
 def cmd_comment(args):
     output = args.output or args.file
-    anchor = parse_nbsp(args.anchor)
+    if not args.anchor and not args.footnote:
+        print("Error: --anchor or --footnote is required", file=sys.stderr)
+        sys.exit(1)
+    anchor = parse_nbsp(args.anchor) if args.anchor else None
     context = parse_nbsp(args.context) if args.context else None
     ok, msg = add_comment_to_docx(
         args.file, output, anchor, args.text,
@@ -227,6 +231,7 @@ def cmd_comment(args):
         paragraph=args.paragraph,
         context=context,
         occurrence=args.occurrence,
+        footnote=args.footnote,
     )
     if ok:
         print(msg)
@@ -335,18 +340,20 @@ def main():
     p_rep.add_argument("--paragraph", type=int, default=None, help="Limit to paragraph number")
     p_rep.add_argument("--context", default=None, help="Unique surrounding text to locate the match")
     p_rep.add_argument("--occurrence", type=int, default=None, help="Match the Nth occurrence (1-based)")
+    p_rep.add_argument("--footnote", type=int, default=None, help="Replace within footnote N")
     p_rep.add_argument("-o", "--output", default=None, help="Output file (default: overwrite input)")
     p_rep.set_defaults(func=cmd_replace)
 
     # comment
     p_comment = sub.add_parser("comment", help="Add a comment anchored to text")
     p_comment.add_argument("file")
-    p_comment.add_argument("--anchor", required=True, help="Text to anchor the comment to")
+    p_comment.add_argument("--anchor", default=None, help="Text to anchor the comment to")
     p_comment.add_argument("--text", required=True, help="Comment text")
     p_comment.add_argument("--author", default="wordcli", help="Author name for the comment")
     p_comment.add_argument("--paragraph", type=int, default=None, help="Limit to paragraph number")
     p_comment.add_argument("--context", default=None, help="Unique surrounding text to locate the anchor")
     p_comment.add_argument("--occurrence", type=int, default=None, help="Match the Nth occurrence (1-based)")
+    p_comment.add_argument("--footnote", type=int, default=None, help="Comment on footnote N (anchors to footnote reference in main text)")
     p_comment.add_argument("-o", "--output", default=None, help="Output file (default: overwrite input)")
     p_comment.set_defaults(func=cmd_comment)
 

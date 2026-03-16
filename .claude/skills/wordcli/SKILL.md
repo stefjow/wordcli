@@ -34,8 +34,9 @@ Run via `python -m wordcli <command>`. Use `python -m wordcli --help` or `python
 | `tables <file> [N]` | Extract tables as markdown |
 | `diff <file1> <file2>` | Compare accepted text paragraph by paragraph |
 | `verify <file> --original <orig>` | Check for text loss. `--author`, `--truncate N` |
-| `replace <file> --old "X" --new "Y"` | Replace as tracked change. `--author`, `--paragraph`, `--context`, `--occurrence`, `-o` |
+| `replace <file> --old "X" --new "Y"` | Replace as tracked change. `--author`, `--paragraph`, `--context`, `--occurrence`, `--footnote N`, `-o` |
 | `comment <file> --anchor "X" --text "Y"` | Add comment anchored to text. `--author`, `--paragraph`, `--context`, `--occurrence`, `-o` |
+| `comment <file> --footnote N --text "Y"` | Add comment on footnote reference in main text. `--author`, `-o` |
 
 ## Key workflow: search before replace/comment
 
@@ -65,6 +66,20 @@ Non-breaking spaces (U+00A0) appear as `[NBSP]` in all text output. When passing
 # Search output shows: [5] 100[NBSP]000 inhabitants
 # To replace, use the marker:
 python -m wordcli replace document.docx --old "100[NBSP]000" --new "100[NBSP]001" --author Claude --paragraph 5
+```
+
+## Footnotes
+
+Use `footnotes <file>` to list footnote text. To replace within a footnote, use `--footnote N`:
+
+```bash
+python -m wordcli replace document.docx --old "typo" --new "fixed" --author Claude --footnote 3
+```
+
+To comment on a footnote, use `--footnote N` without `--anchor` — the comment anchors to the footnote reference in the main text:
+
+```bash
+python -m wordcli comment document.docx --footnote 3 --text "Check this" --author Claude
 ```
 
 ## Notes

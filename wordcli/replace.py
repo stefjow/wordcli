@@ -14,7 +14,7 @@ from .constants import (
     RPR_TAG, AUTHOR_ATTR, DATE_ATTR, ID_ATTR, XML_SPACE_ATTR,
     _register_namespaces,
 )
-from .matching import find_matching_paragraphs, select_match
+from .matching import find_matching_paragraphs, find_matching_paragraphs_in_footnote, select_match
 
 
 def _make_t_elem(text):
@@ -271,34 +271,11 @@ def _find_paragraph_in_raw(raw_xml, p_elem):
     return None
 
 
-def replace_in_docx(input_path, output_path, old_text, new_text, author,
-                    paragraph=None, context=None, occurrence=None):
-    """Replace old_text with new_text as a tracked change.
+def _do_replace(raw_xml, p_elem, old_text, new_text, author, date_str, context):
+    """Perform replacement in a paragraph and splice into raw XML.
 
-    Returns (success, message).
+    Returns (success, output_bytes, error_message).
     """
-    date_str = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-    with zipfile.ZipFile(input_path, "r") as zf:
-        raw_doc = zf.read("word/document.xml")
-    _register_namespaces(raw_doc)
-    root = ET.fromstring(raw_doc)
-
-    body = root.find(BODY_TAG)
-    if body is None:
-        return False, "Could not find document body"
-
-    # Find and validate matches
-    matches, err = find_matching_paragraphs(body, old_text, paragraph, context)
-    if err:
-        return False, err
-
-    p_elem, _, err = select_match(matches, old_text, occurrence)
-    if err:
-        return False, err
-
-    rev_id = _find_max_revision_id(root) + 1
-
     # Save original run texts for locating in raw XML
     orig_run_texts = []
     for child in p_elem:
@@ -307,34 +284,68 @@ def replace_in_docx(input_path, output_path, old_text, new_text, author,
                 if sub.tag == T_TAG and sub.text:
                     orig_run_texts.append(sub.text)
 
+    root = ET.fromstring(raw_xml)
+    rev_id = _find_max_revision_id(root) + 1
+
     success, rev_id = _replace_in_paragraph(
         p_elem, old_text, new_text, author, date_str, rev_id, context)
     if not success:
-        return False, "Text not found"
+        return False, None, "Text not found"
 
-    target_p = p_elem
-    target_run_texts = orig_run_texts
+    raw_str = raw_xml.decode("utf-8")
 
-    # Locate the original paragraph in raw XML and splice in the modified version
-    raw_str = raw_doc.decode("utf-8")
-
-    # Build a dummy p_elem with the original run texts for matching
     dummy_p = ET.Element(P_TAG)
-    for txt in target_run_texts:
+    for txt in orig_run_texts:
         r = ET.SubElement(dummy_p, R_TAG)
         t = ET.SubElement(r, T_TAG)
         t.text = txt
 
     span = _find_paragraph_in_raw(raw_str, dummy_p)
     if span is None:
-        return False, "Could not locate paragraph in raw XML for splicing"
+        return False, None, "Could not locate paragraph in raw XML for splicing"
 
     start, end = span
-    new_p_xml = _serialize_paragraph(target_p)
+    new_p_xml = _serialize_paragraph(p_elem)
     output_str = raw_str[:start] + new_p_xml + raw_str[end:]
-    output_bytes = output_str.encode("utf-8")
+    return True, output_str.encode("utf-8"), None
 
-    # Write new docx (use temp file for safe in-place overwrite)
+
+def replace_in_docx(input_path, output_path, old_text, new_text, author,
+                    paragraph=None, context=None, occurrence=None, footnote=None):
+    """Replace old_text with new_text as a tracked change.
+
+    Returns (success, message).
+    """
+    date_str = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    target_file = "word/footnotes.xml" if footnote else "word/document.xml"
+
+    with zipfile.ZipFile(input_path, "r") as zf:
+        raw_xml = zf.read(target_file)
+    _register_namespaces(raw_xml)
+    root = ET.fromstring(raw_xml)
+
+    if footnote:
+        matches, err = find_matching_paragraphs_in_footnote(
+            root, footnote, old_text, context)
+    else:
+        body = root.find(BODY_TAG)
+        if body is None:
+            return False, "Could not find document body"
+        matches, err = find_matching_paragraphs(body, old_text, paragraph, context)
+
+    if err:
+        return False, err
+
+    p_elem, _, err = select_match(matches, old_text, occurrence)
+    if err:
+        return False, err
+
+    success, output_bytes, err = _do_replace(
+        raw_xml, p_elem, old_text, new_text, author, date_str, context)
+    if not success:
+        return False, err
+
+    # Write new docx
     use_temp = os.path.abspath(input_path) == os.path.abspath(output_path)
     dest = output_path
     if use_temp:
@@ -344,7 +355,7 @@ def replace_in_docx(input_path, output_path, old_text, new_text, author,
     with zipfile.ZipFile(input_path, "r") as zin:
         with zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED) as zout:
             for item in zin.infolist():
-                if item.filename == "word/document.xml":
+                if item.filename == target_file:
                     zout.writestr(item, output_bytes)
                 else:
                     zout.writestr(item, zin.read(item.filename))
