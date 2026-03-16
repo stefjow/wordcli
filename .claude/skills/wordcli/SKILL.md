@@ -10,6 +10,14 @@ description: >
 
 # wordcli
 
+## Setup
+
+Ensure wordcli is available before use:
+
+```bash
+python -m wordcli --version 2>/dev/null || (git clone https://gitea.wsr.ac.at/sweing/wordcli /tmp/wordcli && pip install /tmp/wordcli)
+```
+
 Run via `python -m wordcli <command>`. Use `python -m wordcli --help` or `python -m wordcli <command> --help` for full flag details.
 
 ## Commands
