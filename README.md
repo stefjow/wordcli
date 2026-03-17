@@ -57,6 +57,7 @@ Tracked changes are shown as `[+inserted+]` and `[-deleted-]` by default. Inline
 - Footnote references: `[^N]` (e.g. `...text.[^3]) More text...`)
 - Field codes: `[display](FIELD instruction)` (e.g. `[1](SEQ Übersicht \* ARABIC)`, `[Abbildung 1](REF _Ref_fig1 \h)`)
 - Hyperlinks: `[text](url)`
+- Images: `[IMG:N]` — sequential image number, use `images` command for details
 
 ### search — Search with context
 
@@ -201,6 +202,18 @@ python -m wordcli fields document.docx --seq   # Only SEQ fields (captions)
 ```
 
 Lists all field codes (SEQ, REF, TOC, etc.) with their paragraph number, field instruction, and display text. Useful for checking existing caption numbering before adding bookmarks or cross-references.
+
+### images — List or extract images
+
+```
+python -m wordcli images document.docx          # List all images with metadata and captions
+python -m wordcli images document.docx 3         # Extract image 3 to a temp file
+python -m wordcli images document.docx --extract-all -o /tmp/imgs/  # Extract all to directory
+```
+
+Lists embedded images with paragraph position, format (PNG, JPEG, EMF, etc.), dimensions, name, alt text, and auto-detected captions. Images appear as `[IMG:N]` markers in `text` output.
+
+Viewable formats (PNG, JPEG, GIF, BMP, TIFF) can be opened after extraction. Non-viewable formats (EMF, WMF) are flagged as "(not viewable)" in the listing.
 
 ### format — Apply or remove run formatting
 
