@@ -1,6 +1,9 @@
 """Shared logic for finding text matches in paragraphs."""
 
-from .constants import P_TAG, R_TAG, T_TAG, BODY_TAG, FOOTNOTE_TAG, ID_ATTR
+from .constants import (
+    P_TAG, R_TAG, T_TAG, BODY_TAG, FOOTNOTE_TAG, ID_ATTR,
+    FLDCHAR_TAG, FLDCHARTYPE_ATTR,
+)
 
 
 def get_run_text(run):
@@ -113,3 +116,32 @@ def find_matching_paragraphs_in_footnote(fn_root, footnote_id, search_text, cont
                 matches.append((f"fn{footnote_id}", p_elem, snippet))
             return matches, None
     return None, f"Footnote {footnote_id} not found"
+
+
+def check_field_overlap(run_info, first_ri, last_ri):
+    """Check if runs in [first_ri, last_ri] overlap with any field code.
+
+    Fields are delimited by fldChar begin/end runs.  Returns a warning
+    string when the matched run range overlaps (fully or partially) with
+    a field, or None when there is no overlap.
+    """
+    # Build field spans: list of (begin_ri, end_ri)
+    fields = []
+    begin_stack = []
+    for ri_idx, (run_elem, _) in enumerate(run_info):
+        for sub in run_elem:
+            if sub.tag == FLDCHAR_TAG:
+                fld_type = sub.get(FLDCHARTYPE_ATTR)
+                if fld_type == "begin":
+                    begin_stack.append(ri_idx)
+                elif fld_type == "end" and begin_stack:
+                    fields.append((begin_stack.pop(), ri_idx))
+
+    for fb, fe in fields:
+        # Any overlap between [first_ri, last_ri] and [fb, fe]?
+        if first_ri <= fe and last_ri >= fb:
+            return (
+                "Warning: matched text overlaps with a field code "
+                "(e.g., REF, SEQ, HYPERLINK). The field structure may be affected."
+            )
+    return None

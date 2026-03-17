@@ -14,7 +14,7 @@ from .constants import (
     RPR_TAG, AUTHOR_ATTR, DATE_ATTR, ID_ATTR, XML_SPACE_ATTR,
     _register_namespaces,
 )
-from .matching import find_matching_paragraphs, find_matching_paragraphs_in_footnote, select_match
+from .matching import find_matching_paragraphs, find_matching_paragraphs_in_footnote, select_match, check_field_overlap
 
 
 def _make_t_elem(text):
@@ -83,7 +83,7 @@ def _replace_in_paragraph(p_elem, old_text, new_text, author, date_str, rev_id,
                            context=None):
     """Replace old_text with new_text as tracked change in paragraph.
 
-    Returns (success, next_rev_id).
+    Returns (success, next_rev_id, warning).
     """
     # Collect direct run children with their text
     run_info = []  # (run_elem, text)
@@ -93,7 +93,7 @@ def _replace_in_paragraph(p_elem, old_text, new_text, author, date_str, rev_id,
             run_info.append((child, text))
 
     if not run_info:
-        return False, rev_id
+        return False, rev_id, None
 
     full_text = "".join(ri[1] for ri in run_info)
 
@@ -101,13 +101,13 @@ def _replace_in_paragraph(p_elem, old_text, new_text, author, date_str, rev_id,
     if context is not None:
         ctx_pos = full_text.find(context)
         if ctx_pos == -1:
-            return False, rev_id
+            return False, rev_id, None
         pos = full_text.find(old_text, ctx_pos, ctx_pos + len(context))
     else:
         pos = full_text.find(old_text)
 
     if pos == -1:
-        return False, rev_id
+        return False, rev_id, None
 
     match_end = pos + len(old_text)
 
@@ -132,7 +132,10 @@ def _replace_in_paragraph(p_elem, old_text, new_text, author, date_str, rev_id,
         char_offset = run_end
 
     if first_ri is None or last_ri is None:
-        return False, rev_id
+        return False, rev_id, None
+
+    # Check for field code overlap
+    field_warning = check_field_overlap(run_info, first_ri, last_ri)
 
     # Build replacement elements
     new_elements = []
@@ -195,7 +198,7 @@ def _replace_in_paragraph(p_elem, old_text, new_text, author, date_str, rev_id,
     for i, elem in enumerate(new_elements):
         p_elem.insert(insert_pos + i, elem)
 
-    return True, rev_id
+    return True, rev_id, field_warning
 
 
 def _serialize_paragraph(p_elem):
@@ -274,7 +277,7 @@ def _find_paragraph_in_raw(raw_xml, p_elem):
 def _do_replace(raw_xml, p_elem, old_text, new_text, author, date_str, context):
     """Perform replacement in a paragraph and splice into raw XML.
 
-    Returns (success, output_bytes, error_message).
+    Returns (success, output_bytes, field_warning, error_message).
     """
     # Save original run texts for locating in raw XML
     orig_run_texts = []
@@ -287,10 +290,10 @@ def _do_replace(raw_xml, p_elem, old_text, new_text, author, date_str, context):
     root = ET.fromstring(raw_xml)
     rev_id = _find_max_revision_id(root) + 1
 
-    success, rev_id = _replace_in_paragraph(
+    success, rev_id, field_warning = _replace_in_paragraph(
         p_elem, old_text, new_text, author, date_str, rev_id, context)
     if not success:
-        return False, None, "Text not found"
+        return False, None, None, "Text not found"
 
     raw_str = raw_xml.decode("utf-8")
 
@@ -302,12 +305,12 @@ def _do_replace(raw_xml, p_elem, old_text, new_text, author, date_str, context):
 
     span = _find_paragraph_in_raw(raw_str, dummy_p)
     if span is None:
-        return False, None, "Could not locate paragraph in raw XML for splicing"
+        return False, None, None, "Could not locate paragraph in raw XML for splicing"
 
     start, end = span
     new_p_xml = _serialize_paragraph(p_elem)
     output_str = raw_str[:start] + new_p_xml + raw_str[end:]
-    return True, output_str.encode("utf-8"), None
+    return True, output_str.encode("utf-8"), field_warning, None
 
 
 def replace_in_docx(input_path, output_path, old_text, new_text, author,
@@ -340,7 +343,7 @@ def replace_in_docx(input_path, output_path, old_text, new_text, author,
     if err:
         return False, err
 
-    success, output_bytes, err = _do_replace(
+    success, output_bytes, field_warning, err = _do_replace(
         raw_xml, p_elem, old_text, new_text, author, date_str, context)
     if not success:
         return False, err
@@ -363,4 +366,7 @@ def replace_in_docx(input_path, output_path, old_text, new_text, author,
     if use_temp:
         shutil.move(dest, output_path)
 
-    return True, f"Replaced in {output_path}"
+    msg = f"Replaced in {output_path}"
+    if field_warning:
+        msg = f"{field_warning}\n{msg}"
+    return True, msg

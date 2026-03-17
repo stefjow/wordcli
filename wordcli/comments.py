@@ -17,7 +17,7 @@ from .constants import (
     XML_SPACE_ATTR, PPR_TAG, PSTYLE_TAG,
     _register_namespaces,
 )
-from .matching import find_matching_paragraphs, select_match, get_run_text
+from .matching import find_matching_paragraphs, select_match, get_run_text, check_field_overlap
 
 
 def _clone_run_with_text(run, text):
@@ -32,6 +32,18 @@ def _clone_run_with_text(run, text):
         t.set(XML_SPACE_ATTR, "preserve")
     new_run.append(t)
     return new_run
+
+
+def _set_run_text(run, new_text):
+    """Replace all w:t text in a run with *new_text*, preserving other children."""
+    for sub in list(run):
+        if sub.tag == T_TAG:
+            run.remove(sub)
+    t = ET.Element(T_TAG)
+    t.text = new_text
+    if new_text and (new_text[0] == " " or new_text[-1] == " "):
+        t.set(XML_SPACE_ATTR, "preserve")
+    run.append(t)
 
 
 def _find_max_id(root):
@@ -69,10 +81,26 @@ def _make_initials(author):
     return "".join(p[0].upper() for p in parts)
 
 
+def _make_comment_ref_run(comment_id):
+    """Create the commentReference run element."""
+    ref_run = ET.Element(R_TAG)
+    ref_rpr = ET.SubElement(ref_run, RPR_TAG)
+    ref_style = ET.SubElement(ref_rpr, RSTYLE_TAG)
+    ref_style.set(VAL_ATTR, "CommentReference")
+    ref_ref = ET.SubElement(ref_run, COMMENT_REFERENCE_TAG)
+    ref_ref.set(ID_ATTR, str(comment_id))
+    return ref_run
+
+
 def _add_comment_to_paragraph(p_elem, anchor_text, comment_id, context=None):
     """Insert commentRangeStart/End markers around anchor_text in paragraph.
 
-    Returns True if successful, False otherwise.
+    Uses in-place insertion: only boundary runs are split; all elements
+    between them (including field codes, bookmarks, etc.) are preserved
+    untouched.
+
+    Returns (True, warning) on success or (False, None) on failure.
+    *warning* is a string when the anchor overlaps a field code, else None.
     """
     # Collect direct run children with their text
     run_info = []  # (run_elem, text)
@@ -82,7 +110,7 @@ def _add_comment_to_paragraph(p_elem, anchor_text, comment_id, context=None):
             run_info.append((child, text))
 
     if not run_info:
-        return False
+        return False, None
 
     full_text = "".join(ri[1] for ri in run_info)
 
@@ -90,13 +118,13 @@ def _add_comment_to_paragraph(p_elem, anchor_text, comment_id, context=None):
     if context is not None:
         ctx_pos = full_text.find(context)
         if ctx_pos == -1:
-            return False
+            return False, None
         pos = full_text.find(anchor_text, ctx_pos, ctx_pos + len(context))
     else:
         pos = full_text.find(anchor_text)
 
     if pos == -1:
-        return False
+        return False, None
 
     match_end = pos + len(anchor_text)
 
@@ -121,74 +149,75 @@ def _add_comment_to_paragraph(p_elem, anchor_text, comment_id, context=None):
         char_offset = run_end
 
     if first_ri is None or last_ri is None:
-        return False
+        return False, None
 
-    # Build new elements to replace the affected runs
-    new_elements = []
+    # Check for field code overlap
+    warning = check_field_overlap(run_info, first_ri, last_ri)
 
     first_run, first_text = run_info[first_ri]
 
-    # Text before the match in the first run
-    before_text = first_text[:first_offset]
-    if before_text:
-        new_elements.append(_clone_run_with_text(first_run, before_text))
-
-    # commentRangeStart
+    # Build marker elements
     range_start = ET.Element(COMMENT_RANGE_START_TAG)
     range_start.set(ID_ATTR, str(comment_id))
-    new_elements.append(range_start)
-
-    # The matched runs (preserved as-is, possibly split)
-    if first_ri == last_ri:
-        matched_text = first_text[first_offset:last_end_offset]
-        new_elements.append(_clone_run_with_text(first_run, matched_text))
-    else:
-        # First partial run
-        new_elements.append(_clone_run_with_text(first_run, first_text[first_offset:]))
-        # Middle runs (full)
-        for ri_idx in range(first_ri + 1, last_ri):
-            mid_run, mid_text = run_info[ri_idx]
-            new_elements.append(_clone_run_with_text(mid_run, mid_text))
-        # Last partial run
-        last_run, last_text = run_info[last_ri]
-        new_elements.append(_clone_run_with_text(last_run, last_text[:last_end_offset]))
-
-    # commentRangeEnd
     range_end = ET.Element(COMMENT_RANGE_END_TAG)
     range_end.set(ID_ATTR, str(comment_id))
-    new_elements.append(range_end)
+    ref_run = _make_comment_ref_run(comment_id)
 
-    # commentReference run
-    ref_run = ET.Element(R_TAG)
-    ref_rpr = ET.SubElement(ref_run, RPR_TAG)
-    ref_style = ET.SubElement(ref_rpr, RSTYLE_TAG)
-    ref_style.set(VAL_ATTR, "CommentReference")
-    ref_ref = ET.SubElement(ref_run, COMMENT_REFERENCE_TAG)
-    ref_ref.set(ID_ATTR, str(comment_id))
-    new_elements.append(ref_run)
-
-    # Text after the match in the last run
     if first_ri == last_ri:
+        # --- Single-run case ---
+        before_text = first_text[:first_offset]
+        matched_text = first_text[first_offset:last_end_offset]
         after_text = first_text[last_end_offset:]
+
+        # Trim the run to just the matched portion
+        _set_run_text(first_run, matched_text)
+
+        # Insert after first_run (order: rangeEnd, refRun, after_clone?)
+        idx = list(p_elem).index(first_run)
+        post = [range_end, ref_run]
+        if after_text:
+            post.append(_clone_run_with_text(first_run, after_text))
+        for i, elem in enumerate(post):
+            p_elem.insert(idx + 1 + i, elem)
+
+        # Insert before first_run (order: before_clone?, rangeStart)
+        idx = list(p_elem).index(first_run)
+        pre = []
+        if before_text:
+            pre.append(_clone_run_with_text(first_run, before_text))
+        pre.append(range_start)
+        for i, elem in enumerate(pre):
+            p_elem.insert(idx + i, elem)
     else:
-        _, last_text = run_info[last_ri]
+        # --- Multi-run case: preserve everything between first and last ---
+        last_run, last_text = run_info[last_ri]
+        before_text = first_text[:first_offset]
         after_text = last_text[last_end_offset:]
 
-    if after_text:
-        after_run = run_info[last_ri][0]
-        new_elements.append(_clone_run_with_text(after_run, after_text))
+        # Trim boundary runs to their matched portions
+        if first_offset > 0:
+            _set_run_text(first_run, first_text[first_offset:])
+        if last_end_offset < len(last_text):
+            _set_run_text(last_run, last_text[:last_end_offset])
 
-    # Find insertion point, remove old runs, insert new elements
-    children = list(p_elem)
-    insert_pos = children.index(run_info[first_ri][0])
+        # Insert after last_run (order: rangeEnd, refRun, after_clone?)
+        idx = list(p_elem).index(last_run)
+        post = [range_end, ref_run]
+        if after_text:
+            post.append(_clone_run_with_text(last_run, after_text))
+        for i, elem in enumerate(post):
+            p_elem.insert(idx + 1 + i, elem)
 
-    for ri_idx in range(first_ri, last_ri + 1):
-        p_elem.remove(run_info[ri_idx][0])
+        # Insert before first_run (order: before_clone?, rangeStart)
+        idx = list(p_elem).index(first_run)
+        pre = []
+        if before_text:
+            pre.append(_clone_run_with_text(first_run, before_text))
+        pre.append(range_start)
+        for i, elem in enumerate(pre):
+            p_elem.insert(idx + i, elem)
 
-    for i, elem in enumerate(new_elements):
-        p_elem.insert(insert_pos + i, elem)
-
-    return True
+    return True, warning
 
 
 def _build_comment_element(comment_id, author, date_str, text):
@@ -428,6 +457,8 @@ def add_comment_to_docx(input_path, output_path, anchor_text, comment_text,
 
     comment_id = max(doc_max_id, comment_max_id) + 1
 
+    field_warning = None
+
     if footnote:
         # Anchor comment on the footnote reference in the main text
         success, p_elem, target_run_texts = _add_comment_to_footnote_ref(
@@ -452,7 +483,8 @@ def add_comment_to_docx(input_path, output_path, anchor_text, comment_text,
                     if sub.tag == T_TAG and sub.text:
                         target_run_texts.append(sub.text)
 
-        success = _add_comment_to_paragraph(p_elem, anchor_text, comment_id, context)
+        success, field_warning = _add_comment_to_paragraph(
+            p_elem, anchor_text, comment_id, context)
         if not success:
             return False, "Anchor text not found"
 
@@ -524,4 +556,7 @@ def add_comment_to_docx(input_path, output_path, anchor_text, comment_text,
     if use_temp:
         shutil.move(dest, output_path)
 
-    return True, f"Comment added in {output_path}"
+    msg = f"Comment added in {output_path}"
+    if field_warning:
+        msg = f"{field_warning}\n{msg}"
+    return True, msg

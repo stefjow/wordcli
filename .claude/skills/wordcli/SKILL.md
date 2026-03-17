@@ -87,6 +87,8 @@ Inline elements in `text` output use markdown-style markers:
 
 Field markers help identify text that is a field (don't replace with `replace` — use `crossref` instead).
 
+**Field overlap warning:** Both `replace` and `comment` emit a warning when the matched text overlaps a field code (REF, SEQ, HYPERLINK, etc.). For `comment`, fields are preserved — the warning is informational. For `replace`, the field structure will be destroyed — prefer `crossref` to modify field display text, or acknowledge that the field is intentionally being removed.
+
 Use `footnotes <file>` to list footnote text. To replace within a footnote, use `--footnote N`:
 
 ```bash
