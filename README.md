@@ -90,6 +90,8 @@ python -m wordcli changes document.docx
 python -m wordcli changes document.docx --author Claude
 ```
 
+Shows text insertions (`[INS]`), deletions (`[DEL]`), formatting changes (`[FORMAT]`), and style changes (`[STYLE]`).
+
 ### tables — Extract tables as markdown
 
 ```
@@ -199,6 +201,19 @@ python -m wordcli fields document.docx --seq   # Only SEQ fields (captions)
 ```
 
 Lists all field codes (SEQ, REF, TOC, etc.) with their paragraph number, field instruction, and display text. Useful for checking existing caption numbering before adding bookmarks or cross-references.
+
+### format — Apply or remove run formatting
+
+```
+python -m wordcli format document.docx --text "important word" --bold --paragraph 5 --author Claude
+python -m wordcli format document.docx --text "not italic" --no-italic --paragraph 5 --author Claude
+python -m wordcli format document.docx --text "emphasis" --bold --italic --underline --author Claude
+python -m wordcli format document.docx --text "removed" --no-bold --no-italic -o out.docx
+```
+
+Applies or removes run-level formatting (bold, italic, underline, strikethrough) as tracked formatting changes visible in Word's review pane. Multiple flags can be combined. Uses the same disambiguation as `replace` (`--paragraph`, `--context`, `--occurrence`).
+
+Flags: `--bold` / `--no-bold`, `--italic` / `--no-italic`, `--underline` / `--no-underline`, `--strike` / `--no-strike`.
 
 ### style — Show or change paragraph style
 

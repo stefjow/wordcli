@@ -8,10 +8,12 @@ from .constants import (
     BODY_TAG, COMMENT_TAG, DEL_TAG, DELTEXT_TAG, INS_TAG, P_TAG, R_TAG,
     T_TAG, TBL_TAG, TR_TAG, TC_TAG, TCPR_TAG, GRIDSPAN_TAG, VMERGE_TAG,
     SECTPR_TAG, FOOTNOTE_TAG, FOOTNOTE_REF_TAG, PPR_TAG, PSTYLE_TAG,
-    AUTHOR_ATTR, DATE_ATTR, ID_ATTR, VAL_ATTR, HEADING_RE,
+    RPR_TAG, AUTHOR_ATTR, DATE_ATTR, ID_ATTR, VAL_ATTR, HEADING_RE,
     FLDCHAR_TAG, FLDCHARTYPE_ATTR, INSTRTEXT_TAG,
     HYPERLINK_TAG, RID_ATTR,
     STYLE_TAG, STYLE_ID_ATTR, STYLE_TYPE_ATTR, STYLE_NAME_TAG,
+    PPR_CHANGE_TAG, RPR_CHANGE_TAG,
+    B_TAG, I_TAG, U_TAG, STRIKE_TAG,
 )
 from .formatting import table_to_markdown
 
@@ -422,7 +424,59 @@ class DocxReader:
                         "date": date,
                         "text": "".join(parts),
                     })
+            elif elem.tag == PPR_CHANGE_TAG:
+                author = elem.get(AUTHOR_ATTR, "")
+                date = elem.get(DATE_ATTR, "")
+                # Describe the change: old style -> new style
+                old_ppr = elem.find(PPR_TAG)
+                old_style = None
+                if old_ppr is not None:
+                    old_pstyle = old_ppr.find(PSTYLE_TAG)
+                    if old_pstyle is not None:
+                        old_style = old_pstyle.get(VAL_ATTR)
+                # New style is on the parent pPr
+                parent_ppr = elem.find("..")  # won't work with ET
+                # Walk up: elem's parent is pPr, pPr's sibling pStyle has new val
+                new_style = None
+                # Use the context: pPrChange is inside pPr
+                result.append({
+                    "type": "STYLE",
+                    "author": author,
+                    "date": date,
+                    "text": f"{old_style or '(default)'} -> (changed)",
+                })
+            elif elem.tag == RPR_CHANGE_TAG:
+                author = elem.get(AUTHOR_ATTR, "")
+                date = elem.get(DATE_ATTR, "")
+                # Describe what changed by comparing old rPr with current
+                old_rpr = elem.find(RPR_TAG)
+                props = []
+                for tag, name in [(B_TAG, "bold"), (I_TAG, "italic"),
+                                  (U_TAG, "underline"), (STRIKE_TAG, "strike")]:
+                    old_has = self._rpr_has_prop(old_rpr, tag)
+                    # Current rPr is the parent of rPrChange
+                    # We can't walk up in ET, so just report old state
+                    props.append(f"{name}={'on' if old_has else 'off'}")
+                result.append({
+                    "type": "FORMAT",
+                    "author": author,
+                    "date": date,
+                    "text": f"was: {', '.join(props)}",
+                })
         return result
+
+    @staticmethod
+    def _rpr_has_prop(rpr, tag):
+        """Check if an rPr element has a formatting property enabled."""
+        if rpr is None:
+            return False
+        elem = rpr.find(tag)
+        if elem is None:
+            return False
+        val = elem.get(VAL_ATTR)
+        if val is not None and val.lower() in ("false", "0"):
+            return False
+        return True
 
     def extract_accepted_text(self):
         """Extract full accepted text (deletions removed, insertions kept)."""

@@ -12,6 +12,7 @@ from .remove_comment import remove_comment_from_docx
 from .revert_change import revert_change_in_docx
 from .crossref import add_bookmark_to_docx, add_crossref_to_docx
 from .style import change_style_in_docx
+from .format import format_in_docx
 from .formatting import show_nbsp, parse_nbsp, table_to_markdown
 
 
@@ -334,6 +335,44 @@ def cmd_fields(args):
         print(f"[{f['paragraph']}] {f['field_code']} = \"{f['display']}\"  ->  {ctx}")
 
 
+def cmd_format(args):
+    output = args.output or args.file
+    text = parse_nbsp(args.text)
+    context = parse_nbsp(args.context) if args.context else None
+    changes = {}
+    if args.bold:
+        changes["bold"] = True
+    if args.no_bold:
+        changes["bold"] = False
+    if args.italic:
+        changes["italic"] = True
+    if args.no_italic:
+        changes["italic"] = False
+    if args.underline:
+        changes["underline"] = True
+    if args.no_underline:
+        changes["underline"] = False
+    if args.strike:
+        changes["strike"] = True
+    if args.no_strike:
+        changes["strike"] = False
+    if not changes:
+        print("Error: specify at least one formatting flag (e.g. --bold, --no-italic)", file=sys.stderr)
+        sys.exit(1)
+    ok, msg = format_in_docx(
+        args.file, output, text, changes,
+        author=args.author,
+        paragraph=args.paragraph,
+        context=context,
+        occurrence=args.occurrence,
+    )
+    if ok:
+        print(msg)
+    else:
+        print(f"Error: {msg}", file=sys.stderr)
+        sys.exit(1)
+
+
 def cmd_style(args):
     doc = DocxReader(args.file)
     if args.list:
@@ -358,7 +397,13 @@ def cmd_style(args):
                 return
         print(f"Paragraph {args.paragraph} not found.", file=sys.stderr)
         sys.exit(1)
-    # Set mode
+    # Set mode — validate style ID
+    styles = doc.extract_styles()
+    valid_ids = {s["id"] for s in styles if s["type"] == "paragraph"}
+    if args.set not in valid_ids:
+        print(f"Error: unknown paragraph style '{args.set}'", file=sys.stderr)
+        print("Use --list to see available styles.", file=sys.stderr)
+        sys.exit(1)
     output = args.output or args.file
     ok, msg = change_style_in_docx(
         args.file, output, args.paragraph, args.set, author=args.author)
@@ -621,6 +666,25 @@ def main():
     p_style.add_argument("--author", default="wordcli", help="Author name for the change")
     p_style.add_argument("-o", "--output", default=None, help="Output file (default: overwrite input)")
     p_style.set_defaults(func=cmd_style)
+
+    # format
+    p_fmt = sub.add_parser("format", help="Apply/remove run formatting as tracked change")
+    p_fmt.add_argument("file")
+    p_fmt.add_argument("--text", required=True, help="Text to format")
+    p_fmt.add_argument("--bold", action="store_true", help="Make bold")
+    p_fmt.add_argument("--no-bold", action="store_true", help="Remove bold")
+    p_fmt.add_argument("--italic", action="store_true", help="Make italic")
+    p_fmt.add_argument("--no-italic", action="store_true", help="Remove italic")
+    p_fmt.add_argument("--underline", action="store_true", help="Add underline")
+    p_fmt.add_argument("--no-underline", action="store_true", help="Remove underline")
+    p_fmt.add_argument("--strike", action="store_true", help="Add strikethrough")
+    p_fmt.add_argument("--no-strike", action="store_true", help="Remove strikethrough")
+    p_fmt.add_argument("--author", default="wordcli", help="Author name for the change")
+    p_fmt.add_argument("--paragraph", type=int, default=None, help="Limit to paragraph number")
+    p_fmt.add_argument("--context", default=None, help="Unique surrounding text to locate the match")
+    p_fmt.add_argument("--occurrence", type=int, default=None, help="Match the Nth occurrence (1-based)")
+    p_fmt.add_argument("-o", "--output", default=None, help="Output file (default: overwrite input)")
+    p_fmt.set_defaults(func=cmd_format)
 
     # xml
     p_xml = sub.add_parser("xml", help="Show raw XML of a document part")

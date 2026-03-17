@@ -44,7 +44,8 @@ Run via `python -m wordcli <command>`. Use `python -m wordcli --help` or `python
 | `bookmark <file> --anchor "X" --name "id"` | Add bookmark around text. `--paragraph`, `--context`, `--occurrence`, `-o` |
 | `crossref <file> --bookmark "id" --text "X"` | Replace text with clickable REF field (tracked change). `--display`, `--author`, `--paragraph`, `--context`, `--occurrence`, `-o` |
 | `fields <file>` | Show all field codes (SEQ, REF, etc.). `--seq` for SEQ fields only |
-| `style <file>` | Show or change paragraph style. `--list`, `--paragraph N`, `--set StyleId`, `--author`, `-o` |
+| `format <file> --text "X"` | Apply/remove bold, italic, underline, strike as tracked change. `--bold`, `--no-bold`, `--italic`, `--no-italic`, `--underline`, `--no-underline`, `--strike`, `--no-strike`, `--paragraph`, `--context`, `--occurrence`, `--author`, `-o` |
+| `style <file>` | Show or change paragraph style. `--list`, `--paragraph N`, `--set StyleId`, `--author`, `-o`. Validates style ID against styles.xml |
 | `xml <file> [part]` | Show raw XML of a document part. `--paragraph N`, `--paragraphs N-M`, `--list` |
 
 ## Key workflow: search before replace/comment
@@ -127,6 +128,18 @@ To replace placeholders (e.g. "Abbildung X") with clickable cross-references:
 3. Replace placeholders with REF fields: `crossref <file> --bookmark uebersicht1 --text "Übersicht[NBSP]X" --paragraph 9 --display "Übersicht 1" --author Claude`
 
 Important: do crossrefs BEFORE text corrections, since `crossref` cannot find text inside tracked changes.
+
+## Run formatting (bold, italic, etc.)
+
+Use `format` to apply or remove run-level formatting as a tracked change:
+
+```bash
+python -m wordcli format document.docx --text "important" --bold --paragraph 5 --author Claude
+python -m wordcli format document.docx --text "not italic" --no-italic --paragraph 5 --author Claude
+python -m wordcli format document.docx --text "emphasis" --bold --italic --underline --author Claude
+```
+
+Supports `--bold/--no-bold`, `--italic/--no-italic`, `--underline/--no-underline`, `--strike/--no-strike`. Multiple can be combined. Uses the same disambiguation as `replace` (`--paragraph`, `--context`, `--occurrence`). Changes show as tracked formatting changes in Word's review pane and appear as `[FORMAT]` in `changes` output.
 
 ## Paragraph styles
 
