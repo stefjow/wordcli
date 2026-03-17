@@ -43,6 +43,14 @@ python -m wordcli text document.docx                    # All paragraphs with nu
 python -m wordcli text document.docx --paragraph 5      # Single paragraph
 python -m wordcli text document.docx --paragraphs 3-7   # Range
 python -m wordcli text document.docx --accept           # Accepted text only (no change markers)
+python -m wordcli text document.docx --styles           # Show paragraph style IDs
+```
+
+With `--styles`, the output shows `[nr:StyleId]` instead of `[nr]`:
+```
+[1:berschrift1] Der nominell-effektive Wechselkurs...
+[2] Der nominell-effektive Wechselkurs ist...         <- no style = default/Normal
+[3:Beschriftung] Abbildung 1: Entwicklung...
 ```
 
 Tracked changes are shown as `[+inserted+]` and `[-deleted-]` by default. Inline markers use markdown-style syntax:
@@ -191,6 +199,35 @@ python -m wordcli fields document.docx --seq   # Only SEQ fields (captions)
 ```
 
 Lists all field codes (SEQ, REF, TOC, etc.) with their paragraph number, field instruction, and display text. Useful for checking existing caption numbering before adding bookmarks or cross-references.
+
+### style — Show or change paragraph style
+
+```
+python -m wordcli style document.docx --list                                        # List available paragraph styles
+python -m wordcli style document.docx --list --type character                       # List character styles
+python -m wordcli style document.docx --paragraph 5                                 # Show current style of paragraph 5
+python -m wordcli style document.docx --paragraph 5 --set Heading2 --author Claude  # Change style (tracked change)
+python -m wordcli style document.docx --paragraph 5 --set Standard -o out.docx      # Write to separate file
+```
+
+Changes the paragraph style as a tracked formatting change visible in Word's review pane. Use `--list` to discover valid style IDs (these are internal names like `berschrift1`, not display names like "Heading 1"). Without `--set`, queries the current style.
+
+### xml — Show raw XML of a document part
+
+```
+python -m wordcli xml document.docx                        # Full document.xml (pretty-printed)
+python -m wordcli xml document.docx --paragraph 5          # Single paragraph
+python -m wordcli xml document.docx --paragraphs 3-7       # Range of paragraphs
+python -m wordcli xml document.docx styles                  # Full styles.xml
+python -m wordcli xml document.docx comments                # Full comments.xml
+python -m wordcli xml document.docx footnotes               # Full footnotes.xml
+python -m wordcli xml document.docx word/footer1.xml        # Any zip path
+python -m wordcli xml document.docx --list                  # List all parts in the archive
+```
+
+Shows the raw OOXML with proper namespace prefixes (`w:`, `w14:`, etc.). Useful for inspecting formatting (bold, italic, fonts, styles) that is not visible in `text` output, or debugging unexpected results from editing commands.
+
+Named parts: `document` (default), `footnotes`, `comments`, `styles`, `numbering`, `settings`, `rels`. Any zip path works too (use `--list` to discover available parts).
 
 ## Non-breaking spaces
 

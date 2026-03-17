@@ -11,6 +11,7 @@ from .constants import (
     AUTHOR_ATTR, DATE_ATTR, ID_ATTR, VAL_ATTR, HEADING_RE,
     FLDCHAR_TAG, FLDCHARTYPE_ATTR, INSTRTEXT_TAG,
     HYPERLINK_TAG, RID_ATTR,
+    STYLE_TAG, STYLE_ID_ATTR, STYLE_TYPE_ATTR, STYLE_NAME_TAG,
 )
 from .formatting import table_to_markdown
 
@@ -146,15 +147,19 @@ class DocxReader:
                 pass
         return self._rels_cache.get(rid)
 
-    def _get_heading_level(self, p_elem):
-        """Return heading level (1-9) or 0 if not a heading."""
+    def _get_paragraph_style(self, p_elem):
+        """Return the paragraph style ID or None if default/Normal."""
         ppr = p_elem.find(PPR_TAG)
         if ppr is None:
-            return 0
+            return None
         pstyle = ppr.find(PSTYLE_TAG)
         if pstyle is None:
-            return 0
-        val = pstyle.get(VAL_ATTR, "")
+            return None
+        return pstyle.get(VAL_ATTR) or None
+
+    def _get_heading_level(self, p_elem):
+        """Return heading level (1-9) or 0 if not a heading."""
+        val = self._get_paragraph_style(p_elem) or ""
         m = HEADING_RE.match(val)
         return int(m.group(1)) if m else 0
 
@@ -196,8 +201,8 @@ class DocxReader:
         """Convert table rows to markdown table string."""
         return table_to_markdown(rows)
 
-    def extract_paragraphs(self, accept_changes=False):
-        """Return list of (paragraph_number, text)."""
+    def extract_paragraphs(self, accept_changes=False, include_styles=False):
+        """Return list of (paragraph_number, text) or (paragraph_number, text, style)."""
         root = self._parse_xml("word/document.xml")
         if root is None:
             return []
@@ -209,7 +214,26 @@ class DocxReader:
         for p in body.iter(P_TAG):
             nr += 1
             text = self._text_from_element(p, accept_changes, footnote_markers=True)
-            result.append((nr, text))
+            if include_styles:
+                style = self._get_paragraph_style(p)
+                result.append((nr, text, style))
+            else:
+                result.append((nr, text))
+        return result
+
+    def extract_styles(self):
+        """Return list of {id, name, type} from styles.xml."""
+        root = self._parse_xml("word/styles.xml")
+        if root is None:
+            return []
+        result = []
+        for s in root:
+            if s.tag == STYLE_TAG:
+                style_id = s.get(STYLE_ID_ATTR, "")
+                style_type = s.get(STYLE_TYPE_ATTR, "")
+                name_elem = s.find(STYLE_NAME_TAG)
+                name = name_elem.get(VAL_ATTR, "") if name_elem is not None else ""
+                result.append({"id": style_id, "name": name, "type": style_type})
         return result
 
     def extract_document_structure(self, accept_changes=True):

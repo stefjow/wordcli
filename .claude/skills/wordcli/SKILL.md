@@ -26,7 +26,7 @@ Run via `python -m wordcli <command>`. Use `python -m wordcli --help` or `python
 
 | Command | Purpose |
 |---------|---------|
-| `text <file>` | Extract text with paragraph numbers. `--paragraph N`, `--paragraphs N-M`, `--accept` |
+| `text <file>` | Extract text with paragraph numbers. `--paragraph N`, `--paragraphs N-M`, `--accept`, `--styles` |
 | `search <file> "query"` | Search with context snippets. `--footnotes`, `--context-size N` |
 | `extract <file>` | Structured markdown export. `-o file.md` |
 | `stats <file>` | Document statistics. `--json` |
@@ -44,6 +44,8 @@ Run via `python -m wordcli <command>`. Use `python -m wordcli --help` or `python
 | `bookmark <file> --anchor "X" --name "id"` | Add bookmark around text. `--paragraph`, `--context`, `--occurrence`, `-o` |
 | `crossref <file> --bookmark "id" --text "X"` | Replace text with clickable REF field (tracked change). `--display`, `--author`, `--paragraph`, `--context`, `--occurrence`, `-o` |
 | `fields <file>` | Show all field codes (SEQ, REF, etc.). `--seq` for SEQ fields only |
+| `style <file>` | Show or change paragraph style. `--list`, `--paragraph N`, `--set StyleId`, `--author`, `-o` |
+| `xml <file> [part]` | Show raw XML of a document part. `--paragraph N`, `--paragraphs N-M`, `--list` |
 
 ## Key workflow: search before replace/comment
 
@@ -125,6 +127,50 @@ To replace placeholders (e.g. "Abbildung X") with clickable cross-references:
 3. Replace placeholders with REF fields: `crossref <file> --bookmark uebersicht1 --text "Übersicht[NBSP]X" --paragraph 9 --display "Übersicht 1" --author Claude`
 
 Important: do crossrefs BEFORE text corrections, since `crossref` cannot find text inside tracked changes.
+
+## Paragraph styles
+
+Use `text --styles` to see paragraph style IDs alongside text, and `style` to query or change them:
+
+```bash
+# Scan document structure with styles
+python -m wordcli text document.docx --styles
+# [1:berschrift1] Der nominell-effektive...
+# [2] Der nominell-effektive Wechselkurs ist...    <- no style = default/Normal
+# [3:Beschriftung] Abbildung 1: Entwicklung...
+
+# List available paragraph styles (ID + display name)
+python -m wordcli style document.docx --list
+
+# Query a single paragraph's style
+python -m wordcli style document.docx --paragraph 3
+
+# Change a paragraph's style (tracked change)
+python -m wordcli style document.docx --paragraph 2 --set berschrift2 --author Claude
+```
+
+Style IDs are internal names (e.g. `berschrift1`, not "Heading 1") and vary by document language. Always use `--list` to discover valid IDs. The style change appears as a tracked formatting change in Word's review pane.
+
+## Inspecting raw XML
+
+The `xml` command shows the raw OOXML of any document part. Use it to inspect formatting (bold, italic, styles) that is not visible in `text` output, or to debug unexpected results from editing commands.
+
+```bash
+python -m wordcli xml document.docx --list                  # List all parts in the archive
+python -m wordcli xml document.docx --paragraph 5           # XML for paragraph 5 (document.xml)
+python -m wordcli xml document.docx --paragraphs 3-7        # Range of paragraphs
+python -m wordcli xml document.docx styles                  # Full styles.xml
+python -m wordcli xml document.docx footnotes               # Full footnotes.xml
+python -m wordcli xml document.docx comments                # Full comments.xml
+python -m wordcli xml document.docx word/footer1.xml        # Any zip path
+```
+
+Named parts: `document` (default), `footnotes`, `comments`, `styles`, `numbering`, `settings`, `rels`. You can also pass any zip path directly (use `--list` to discover them).
+
+**When to use:** Do NOT look at raw XML before every operation — `replace` already preserves run formatting. Use `xml` only when:
+- You need to check what formatting (bold, italic, font) applies to specific text
+- An editing command produced unexpected results and you want to understand why
+- You need to inspect structure not exposed by other commands (headers, footers, numbering, relationships)
 
 ## Notes
 

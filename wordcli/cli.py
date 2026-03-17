@@ -11,19 +11,31 @@ from .comments import add_comment_to_docx
 from .remove_comment import remove_comment_from_docx
 from .revert_change import revert_change_in_docx
 from .crossref import add_bookmark_to_docx, add_crossref_to_docx
+from .style import change_style_in_docx
 from .formatting import show_nbsp, parse_nbsp, table_to_markdown
 
 
 def cmd_text(args):
     doc = DocxReader(args.file)
-    paras = doc.extract_paragraphs(accept_changes=args.accept)
-    if args.paragraph is not None:
-        paras = [(n, t) for n, t in paras if n == args.paragraph]
-    elif args.paragraphs is not None:
-        start, end = map(int, args.paragraphs.split("-"))
-        paras = [(n, t) for n, t in paras if start <= n <= end]
-    for nr, text in paras:
-        print(f"[{nr}] {show_nbsp(text)}")
+    paras = doc.extract_paragraphs(accept_changes=args.accept,
+                                   include_styles=args.styles)
+    if args.styles:
+        if args.paragraph is not None:
+            paras = [(n, t, s) for n, t, s in paras if n == args.paragraph]
+        elif args.paragraphs is not None:
+            start, end = map(int, args.paragraphs.split("-"))
+            paras = [(n, t, s) for n, t, s in paras if start <= n <= end]
+        for nr, text, style in paras:
+            label = f"{nr}:{style}" if style else str(nr)
+            print(f"[{label}] {show_nbsp(text)}")
+    else:
+        if args.paragraph is not None:
+            paras = [(n, t) for n, t in paras if n == args.paragraph]
+        elif args.paragraphs is not None:
+            start, end = map(int, args.paragraphs.split("-"))
+            paras = [(n, t) for n, t in paras if start <= n <= end]
+        for nr, text in paras:
+            print(f"[{nr}] {show_nbsp(text)}")
 
 
 def cmd_search(args):
@@ -322,6 +334,117 @@ def cmd_fields(args):
         print(f"[{f['paragraph']}] {f['field_code']} = \"{f['display']}\"  ->  {ctx}")
 
 
+def cmd_style(args):
+    doc = DocxReader(args.file)
+    if args.list:
+        styles = doc.extract_styles()
+        if args.type:
+            styles = [s for s in styles if s["type"] == args.type]
+        else:
+            styles = [s for s in styles if s["type"] == "paragraph"]
+        for s in styles:
+            print(f"{s['id']:30s}  {s['name']}")
+        return
+    if args.paragraph is None:
+        print("Error: --paragraph is required (or use --list)", file=sys.stderr)
+        sys.exit(1)
+    if args.set is None:
+        # Query mode: show current style for the paragraph
+        paras = doc.extract_paragraphs(include_styles=True)
+        for nr, text, style in paras:
+            if nr == args.paragraph:
+                label = style or "(default)"
+                print(f"[{nr}] style={label}")
+                return
+        print(f"Paragraph {args.paragraph} not found.", file=sys.stderr)
+        sys.exit(1)
+    # Set mode
+    output = args.output or args.file
+    ok, msg = change_style_in_docx(
+        args.file, output, args.paragraph, args.set, author=args.author)
+    if ok:
+        print(msg)
+    else:
+        print(f"Error: {msg}", file=sys.stderr)
+        sys.exit(1)
+
+
+def cmd_xml(args):
+    import zipfile
+    import xml.etree.ElementTree as ET
+    from xml.dom.minidom import parseString
+    from .constants import W_NS, P_TAG, BODY_TAG, FOOTNOTE_TAG, _register_namespaces
+
+    PART_MAP = {
+        "document": "word/document.xml",
+        "footnotes": "word/footnotes.xml",
+        "comments": "word/comments.xml",
+        "styles": "word/styles.xml",
+        "numbering": "word/numbering.xml",
+        "settings": "word/settings.xml",
+        "rels": "word/_rels/document.xml.rels",
+    }
+
+    part = args.part
+    if part in PART_MAP:
+        zip_path = PART_MAP[part]
+    else:
+        zip_path = part  # allow raw zip paths like word/header1.xml
+
+    try:
+        with zipfile.ZipFile(args.file, "r") as zf:
+            if args.list:
+                for name in sorted(zf.namelist()):
+                    print(name)
+                return
+            raw = zf.read(zip_path)
+    except KeyError:
+        print(f"Part not found: {zip_path}", file=sys.stderr)
+        sys.exit(1)
+
+    # Filter to paragraph range if requested
+    if args.paragraph is not None or args.paragraphs is not None:
+        _register_namespaces(raw)
+        root = ET.fromstring(raw)
+        # Find paragraphs in body or footnotes
+        if part == "footnotes":
+            containers = list(root.iter(FOOTNOTE_TAG))
+            paragraphs = []
+            for fn in containers:
+                paragraphs.extend(fn.findall(P_TAG))
+        else:
+            body = root.find(BODY_TAG)
+            paragraphs = list(body.findall(P_TAG)) if body is not None else []
+
+        if args.paragraph is not None:
+            start = end = args.paragraph
+        else:
+            start, end = map(int, args.paragraphs.split("-"))
+
+        selected = paragraphs[start - 1:end]  # 1-based to 0-based
+        if not selected:
+            print(f"No paragraphs in range.", file=sys.stderr)
+            sys.exit(1)
+
+        for p in selected:
+            p_xml = ET.tostring(p, encoding="unicode")
+            pretty = parseString(p_xml).toprettyxml(indent="  ")
+            # Remove xml declaration line
+            lines = pretty.split("\n")
+            print("\n".join(lines[1:]).strip())
+            print()
+        return
+
+    # Pretty-print the whole part
+    try:
+        pretty = parseString(raw).toprettyxml(indent="  ")
+        lines = pretty.split("\n")
+        print("\n".join(lines[1:]).strip())
+    except Exception:
+        # If XML parsing fails, dump raw
+        print(raw.decode("utf-8", errors="replace"))
+
+
 def cmd_stats(args):
     doc = DocxReader(args.file)
     s = doc.stats()
@@ -358,6 +481,7 @@ def main():
     p_text.add_argument("--paragraph", type=int, default=None)
     p_text.add_argument("--paragraphs", default=None, help="Range, e.g. 3-7")
     p_text.add_argument("--accept", action="store_true", help="Show accepted text only")
+    p_text.add_argument("--styles", action="store_true", help="Show paragraph style IDs")
     p_text.set_defaults(func=cmd_text)
 
     # search
@@ -486,6 +610,27 @@ def main():
     p_fields.add_argument("file")
     p_fields.add_argument("--seq", action="store_true", help="Only show SEQ fields")
     p_fields.set_defaults(func=cmd_fields)
+
+    # style
+    p_style = sub.add_parser("style", help="Show or change paragraph style")
+    p_style.add_argument("file")
+    p_style.add_argument("--list", action="store_true", help="List available styles")
+    p_style.add_argument("--type", default=None, help="Filter --list by type (paragraph, character, table)")
+    p_style.add_argument("--paragraph", type=int, default=None, help="Paragraph number")
+    p_style.add_argument("--set", default=None, help="Style ID to apply")
+    p_style.add_argument("--author", default="wordcli", help="Author name for the change")
+    p_style.add_argument("-o", "--output", default=None, help="Output file (default: overwrite input)")
+    p_style.set_defaults(func=cmd_style)
+
+    # xml
+    p_xml = sub.add_parser("xml", help="Show raw XML of a document part")
+    p_xml.add_argument("file")
+    p_xml.add_argument("part", nargs="?", default="document",
+                       help="Part name (document, footnotes, comments, styles, numbering, settings, rels) or zip path (default: document)")
+    p_xml.add_argument("--paragraph", type=int, default=None, help="Show XML for a single paragraph (1-based)")
+    p_xml.add_argument("--paragraphs", default=None, help="Range, e.g. 3-7")
+    p_xml.add_argument("--list", action="store_true", help="List all parts in the docx archive")
+    p_xml.set_defaults(func=cmd_xml)
 
     # stats
     p_stats = sub.add_parser("stats", help="Document statistics")
