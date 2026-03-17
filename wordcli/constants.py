@@ -56,8 +56,22 @@ I_TAG = f"{{{W_NS}}}i"
 U_TAG = f"{{{W_NS}}}u"
 STRIKE_TAG = f"{{{W_NS}}}strike"
 
+DRAWING_TAG = f"{{{W_NS}}}drawing"
+
 R_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 RID_ATTR = f"{{{R_NS}}}id"
+
+# Drawing/image namespaces
+WP_NS = "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
+A_NS = "http://schemas.openxmlformats.org/drawingml/2006/main"
+PIC_NS = "http://schemas.openxmlformats.org/drawingml/2006/picture"
+
+WP_INLINE_TAG = f"{{{WP_NS}}}inline"
+WP_ANCHOR_TAG = f"{{{WP_NS}}}anchor"
+WP_EXTENT_TAG = f"{{{WP_NS}}}extent"
+WP_DOCPR_TAG = f"{{{WP_NS}}}docPr"
+A_BLIP_TAG = f"{{{A_NS}}}blip"
+R_EMBED_ATTR = f"{{{R_NS}}}embed"
 
 # Register namespaces so ET.tostring() uses proper prefixes instead of ns0:
 _ns_registered = set()

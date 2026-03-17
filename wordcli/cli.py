@@ -19,7 +19,8 @@ from .formatting import show_nbsp, parse_nbsp, table_to_markdown
 def cmd_text(args):
     doc = DocxReader(args.file)
     paras = doc.extract_paragraphs(accept_changes=args.accept,
-                                   include_styles=args.styles)
+                                   include_styles=args.styles,
+                                   include_images=True)
     if args.styles:
         if args.paragraph is not None:
             paras = [(n, t, s) for n, t, s in paras if n == args.paragraph]
@@ -333,6 +334,52 @@ def cmd_fields(args):
         if len(ctx) > 80:
             ctx = ctx[:80] + "..."
         print(f"[{f['paragraph']}] {f['field_code']} = \"{f['display']}\"  ->  {ctx}")
+
+
+def cmd_images(args):
+    doc = DocxReader(args.file)
+    images = doc.extract_images()
+    if not images:
+        print("No images found.", file=sys.stderr)
+        return
+
+    if args.number is not None:
+        # Extract a single image
+        path, result = doc.extract_image(args.number, output_path=args.output)
+        if path is None:
+            print(f"Error: {result}", file=sys.stderr)
+            sys.exit(1)
+        img = result
+        print(f"[{img['number']}] {img['format']} {img['width_px']}x{img['height_px']}px"
+              f"{' (not viewable)' if not img['viewable'] else ''}")
+        if img["caption"]:
+            print(f"    Caption: {show_nbsp(img['caption'])}")
+        print(f"    Extracted to: {path}")
+    elif args.extract_all:
+        import os
+        out_dir = args.output or "."
+        os.makedirs(out_dir, exist_ok=True)
+        for img in images:
+            if not img["zip_path"]:
+                continue
+            ext = "." + img["zip_path"].rsplit(".", 1)[-1].lower() if "." in img["zip_path"] else ".bin"
+            out_path = os.path.join(out_dir, f"image{img['number']}{ext}")
+            path, result = doc.extract_image(img["number"], output_path=out_path)
+            if path:
+                print(f"[{img['number']}] -> {path}")
+    else:
+        # List all images
+        for img in images:
+            size = f"{img['width_px']}x{img['height_px']}px" if img['width_px'] else ""
+            viewable = "" if img["viewable"] else " (not viewable)"
+            line = f"[{img['number']}] Paragraph {img['paragraph']} | {img['format']} {size}{viewable}"
+            if img["name"]:
+                line += f" | {img['name']}"
+            print(line)
+            if img["alt_text"]:
+                print(f"    Alt: {show_nbsp(img['alt_text'])}")
+            if img["caption"]:
+                print(f"    Caption: {show_nbsp(img['caption'])}")
 
 
 def cmd_format(args):
@@ -655,6 +702,14 @@ def main():
     p_fields.add_argument("file")
     p_fields.add_argument("--seq", action="store_true", help="Only show SEQ fields")
     p_fields.set_defaults(func=cmd_fields)
+
+    # images
+    p_img = sub.add_parser("images", help="List or extract images")
+    p_img.add_argument("file")
+    p_img.add_argument("number", nargs="?", type=int, default=None, help="Image number to extract (1-based)")
+    p_img.add_argument("--extract-all", action="store_true", help="Extract all images")
+    p_img.add_argument("-o", "--output", default=None, help="Output path (file for single, directory for --extract-all)")
+    p_img.set_defaults(func=cmd_images)
 
     # style
     p_style = sub.add_parser("style", help="Show or change paragraph style")

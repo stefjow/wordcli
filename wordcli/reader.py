@@ -1,6 +1,7 @@
 """DocxReader — reading and parsing docx documents."""
 
 import copy
+import re
 import zipfile
 import xml.etree.ElementTree as ET
 
@@ -14,6 +15,8 @@ from .constants import (
     STYLE_TAG, STYLE_ID_ATTR, STYLE_TYPE_ATTR, STYLE_NAME_TAG,
     PPR_CHANGE_TAG, RPR_CHANGE_TAG,
     B_TAG, I_TAG, U_TAG, STRIKE_TAG,
+    DRAWING_TAG, WP_INLINE_TAG, WP_ANCHOR_TAG, WP_EXTENT_TAG,
+    WP_DOCPR_TAG, A_BLIP_TAG, R_EMBED_ATTR,
 )
 from .formatting import table_to_markdown
 
@@ -33,10 +36,12 @@ class DocxReader:
                 return None
         return self._cache[entry]
 
-    def _process_run(self, run, accept_changes, footnote_markers, field_state):
+    def _process_run(self, run, accept_changes, footnote_markers, field_state,
+                     image_counter=None):
         """Process a single run, returning text parts and updating field_state.
 
         field_state is a dict with keys: in_field, in_display, instr, display.
+        image_counter is a dict with key 'n' tracking the global image number.
         """
         parts = []
         for sub in run:
@@ -72,9 +77,13 @@ class DocxReader:
                 fn_id = sub.get(ID_ATTR)
                 if fn_id and int(fn_id) >= 2:
                     parts.append(f"[^{fn_id}]")
+            elif sub.tag == DRAWING_TAG and image_counter is not None:
+                image_counter["n"] += 1
+                parts.append(f"[IMG:{image_counter['n']}]")
         return parts
 
-    def _text_from_element(self, elem, accept_changes=False, footnote_markers=False):
+    def _text_from_element(self, elem, accept_changes=False, footnote_markers=False,
+                           image_counter=None):
         """Extract text from an element, handling tracked changes."""
         parts = []
         # Field state tracks fldChar begin/separate/end across sibling runs
@@ -82,7 +91,8 @@ class DocxReader:
         for child in elem:
             if child.tag == R_TAG:
                 parts.extend(self._process_run(
-                    child, accept_changes, footnote_markers, field_state))
+                    child, accept_changes, footnote_markers, field_state,
+                    image_counter))
             elif child.tag == HYPERLINK_TAG:
                 # Extract hyperlink target and text
                 link_parts = []
@@ -107,7 +117,8 @@ class DocxReader:
                     for run in child:
                         if run.tag == R_TAG:
                             parts.extend(self._process_run(
-                                run, accept_changes, footnote_markers, field_state))
+                                run, accept_changes, footnote_markers, field_state,
+                                image_counter))
                 else:
                     ins_field_state = {"in_field": False, "in_display": False,
                                        "instr": "", "display": []}
@@ -115,7 +126,8 @@ class DocxReader:
                     for run in child:
                         if run.tag == R_TAG:
                             ins_parts.extend(self._process_run(
-                                run, accept_changes, footnote_markers, ins_field_state))
+                                run, accept_changes, footnote_markers, ins_field_state,
+                                image_counter))
                     if ins_parts:
                         parts.append(f"[+{''.join(ins_parts)}+]")
             elif child.tag == DEL_TAG:
@@ -129,7 +141,8 @@ class DocxReader:
                     if del_parts:
                         parts.append(f"[-{''.join(del_parts)}-]")
             else:
-                parts.append(self._text_from_element(child, accept_changes, footnote_markers))
+                parts.append(self._text_from_element(child, accept_changes, footnote_markers,
+                                                     image_counter))
         return "".join(parts)
 
     def _resolve_hyperlink(self, rid):
@@ -203,7 +216,8 @@ class DocxReader:
         """Convert table rows to markdown table string."""
         return table_to_markdown(rows)
 
-    def extract_paragraphs(self, accept_changes=False, include_styles=False):
+    def extract_paragraphs(self, accept_changes=False, include_styles=False,
+                           include_images=False):
         """Return list of (paragraph_number, text) or (paragraph_number, text, style)."""
         root = self._parse_xml("word/document.xml")
         if root is None:
@@ -213,9 +227,11 @@ class DocxReader:
             return []
         result = []
         nr = 0
+        image_counter = {"n": 0} if include_images else None
         for p in body.iter(P_TAG):
             nr += 1
-            text = self._text_from_element(p, accept_changes, footnote_markers=True)
+            text = self._text_from_element(p, accept_changes, footnote_markers=True,
+                                           image_counter=image_counter)
             if include_styles:
                 style = self._get_paragraph_style(p)
                 result.append((nr, text, style))
@@ -384,6 +400,149 @@ class DocxReader:
                     i += 1
 
         return result
+
+    def extract_images(self):
+        """Return list of image info dicts from the document.
+
+        Each dict has: number, paragraph, name, alt_text, format, width_px,
+        height_px, zip_path, viewable.
+        """
+        root = self._parse_xml("word/document.xml")
+        if root is None:
+            return []
+        body = root.find(BODY_TAG)
+        if body is None:
+            return []
+
+        # Build relationship map: rId -> target path
+        rels = {}
+        try:
+            with self.zf.open("word/_rels/document.xml.rels") as f:
+                rels_root = ET.parse(f).getroot()
+            for rel in rels_root:
+                r_id = rel.get("Id")
+                target = rel.get("Target")
+                if r_id and target:
+                    # Targets are relative to word/ directory
+                    if not target.startswith("/"):
+                        target = "word/" + target
+                    else:
+                        target = target.lstrip("/")
+                    rels[r_id] = target
+        except KeyError:
+            pass
+
+        # Detect caption styles and patterns
+        caption_re = re.compile(
+            r"^(Figure|Table|Abbildung|Tabelle|Übersicht|Grafik)\s",
+            re.IGNORECASE,
+        )
+
+        viewable_exts = {".png", ".jpg", ".jpeg", ".tiff", ".tif", ".gif", ".bmp"}
+
+        result = []
+        img_nr = 0
+        paragraphs = list(body.iter(P_TAG))
+        for p_idx, p in enumerate(paragraphs):
+            for drawing in p.iter(DRAWING_TAG):
+                img_nr += 1
+                # Find inline or anchor wrapper
+                wrapper = drawing.find(WP_INLINE_TAG)
+                if wrapper is None:
+                    wrapper = drawing.find(WP_ANCHOR_TAG)
+
+                name = ""
+                alt_text = ""
+                width_px = 0
+                height_px = 0
+                rid = ""
+
+                if wrapper is not None:
+                    # Extent (EMUs -> pixels at 96 DPI: px = emu / 914400 * 96)
+                    extent = wrapper.find(WP_EXTENT_TAG)
+                    if extent is not None:
+                        cx = int(extent.get("cx", "0"))
+                        cy = int(extent.get("cy", "0"))
+                        width_px = round(cx / 914400 * 96)
+                        height_px = round(cy / 914400 * 96)
+
+                    # docPr: name and alt text
+                    docpr = wrapper.find(WP_DOCPR_TAG)
+                    if docpr is not None:
+                        name = docpr.get("name", "")
+                        alt_text = docpr.get("descr", "")
+
+                # Find a:blip anywhere inside the drawing
+                blip = drawing.find(f".//{A_BLIP_TAG}")
+                if blip is not None:
+                    rid = blip.get(R_EMBED_ATTR, "")
+
+                zip_path = rels.get(rid, "")
+                ext = ""
+                if zip_path:
+                    ext = "." + zip_path.rsplit(".", 1)[-1].lower() if "." in zip_path else ""
+                img_format = ext.lstrip(".").upper() if ext else "unknown"
+                viewable = ext.lower() in viewable_exts
+
+                # Detect caption: check nearby paragraphs (up to 2 before/after)
+                caption = ""
+                for adj_idx in [p_idx - 1, p_idx + 1, p_idx - 2, p_idx + 2]:
+                    if 0 <= adj_idx < len(paragraphs):
+                        adj_p = paragraphs[adj_idx]
+                        adj_style = (self._get_paragraph_style(adj_p) or "").lower()
+                        adj_text = self._text_from_element(adj_p, accept_changes=True)
+                        if ("beschriftung" in adj_style
+                                or "caption" in adj_style
+                                or caption_re.match(adj_text)):
+                            caption = adj_text
+                            break
+
+                result.append({
+                    "number": img_nr,
+                    "paragraph": p_idx + 1,
+                    "name": name,
+                    "alt_text": alt_text,
+                    "format": img_format,
+                    "width_px": width_px,
+                    "height_px": height_px,
+                    "zip_path": zip_path,
+                    "viewable": viewable,
+                    "caption": caption,
+                })
+
+        return result
+
+    def extract_image(self, image_number, output_path=None):
+        """Extract an image by its number to a file.
+
+        Returns (path, image_info) or (None, error_message).
+        """
+        import os
+        import tempfile
+
+        images = self.extract_images()
+        if image_number < 1 or image_number > len(images):
+            return None, f"Image {image_number} not found (document has {len(images)} image(s))"
+
+        img = images[image_number - 1]
+        zip_path = img["zip_path"]
+        if not zip_path:
+            return None, f"Image {image_number} has no embedded file (relationship not found)"
+
+        try:
+            data = self.zf.read(zip_path)
+        except KeyError:
+            return None, f"Image file not found in archive: {zip_path}"
+
+        ext = "." + zip_path.rsplit(".", 1)[-1].lower() if "." in zip_path else ".bin"
+        if output_path is None:
+            fd, output_path = tempfile.mkstemp(suffix=ext, prefix=f"wordcli_img{image_number}_")
+            os.close(fd)
+
+        with open(output_path, "wb") as f:
+            f.write(data)
+
+        return output_path, img
 
     def extract_changes(self):
         """Return list of {type, author, date, text}."""

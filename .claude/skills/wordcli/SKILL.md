@@ -6,8 +6,8 @@ description: >
   add comments to a document, replace text with tracked changes, remove comments,
   revert tracked changes, add bookmarks, insert cross-references, detect field codes,
   search document text, extract text or tables, compare documents, verify text
-  integrity, or explicitly mentions wordcli. Supports tracked changes, comments,
-  footnotes, tables, bookmarks, cross-references, field codes, and search.
+  integrity, analyze images, or explicitly mentions wordcli. Supports tracked changes,
+  comments, footnotes, tables, bookmarks, cross-references, field codes, images, and search.
 ---
 
 # wordcli
@@ -44,6 +44,7 @@ Run via `python -m wordcli <command>`. Use `python -m wordcli --help` or `python
 | `bookmark <file> --anchor "X" --name "id"` | Add bookmark around text. `--paragraph`, `--context`, `--occurrence`, `-o` |
 | `crossref <file> --bookmark "id" --text "X"` | Replace text with clickable REF field (tracked change). `--display`, `--author`, `--paragraph`, `--context`, `--occurrence`, `-o` |
 | `fields <file>` | Show all field codes (SEQ, REF, etc.). `--seq` for SEQ fields only |
+| `images <file> [N]` | List images or extract image N to temp file. `--extract-all`, `-o` |
 | `format <file> --text "X"` | Apply/remove bold, italic, underline, strike as tracked change. `--bold`, `--no-bold`, `--italic`, `--no-italic`, `--underline`, `--no-underline`, `--strike`, `--no-strike`, `--paragraph`, `--context`, `--occurrence`, `--author`, `-o` |
 | `style <file>` | Show or change paragraph style. `--list`, `--paragraph N`, `--set StyleId`, `--author`, `-o`. Validates style ID against styles.xml |
 | `xml <file> [part]` | Show raw XML of a document part. `--paragraph N`, `--paragraphs N-M`, `--list` |
@@ -84,6 +85,7 @@ Inline elements in `text` output use markdown-style markers:
 - Footnote references: `[^N]` (e.g. `...ist.[^2]) Durch...`)
 - Field codes: `[display](FIELD instruction)` (e.g. `[1](SEQ Übersicht \* ARABIC)`, `[Abbildung 1](REF _Ref_fig1 \h)`)
 - Hyperlinks: `[text](url)`
+- Images: `[IMG:N]` (e.g. `[IMG:3]`) — sequential image number, use `images` command for details
 
 Field markers help identify text that is a field (don't replace with `replace` — use `crossref` instead).
 
@@ -100,6 +102,32 @@ To comment on a footnote, use `--footnote N` without `--anchor` — the comment 
 ```bash
 python -m wordcli comment document.docx --footnote 3 --text "Check this" --author Claude
 ```
+
+## Images
+
+Use `images` to list embedded images with metadata, captions, and format info. Use `text` output to see `[IMG:N]` markers showing where images appear in the document flow.
+
+```bash
+# List all images with paragraph positions, format, dimensions, captions
+python -m wordcli images document.docx
+# [1] Paragraph 51 | EMF 605x256px (not viewable) | Grafik 40
+#     Caption: Figure 1: Labor force participation...
+# [2] Paragraph 67 | PNG 604x267px | officeArt object
+
+# Extract a single image to a temp file (for viewing/analysis)
+python -m wordcli images document.docx 2
+# Extracted to: /tmp/wordcli_img2_abc123.png
+
+# Extract all images to a directory
+python -m wordcli images document.docx --extract-all -o /tmp/imgs/
+```
+
+**Viewable formats** (PNG, JPEG, GIF, BMP, TIFF) can be viewed with the Read tool after extraction. **Non-viewable formats** (EMF, WMF) are vector/metafile formats common in academic papers — these are flagged as "(not viewable)" in the listing. EMF conversion is not yet supported.
+
+**Workflow for cross-checking images against text:**
+1. Run `images` to get the list with captions and paragraph positions
+2. Extract viewable images and use the Read tool to inspect them
+3. Cross-reference image content with claims in surrounding paragraphs
 
 ## Undoing mistakes
 
